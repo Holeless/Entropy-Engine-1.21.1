@@ -39,13 +39,13 @@ public final class Curses {
     /** Players cannot sleep. */
     public static final Curse INSOMNIA = register("insomnia");
 
-    /** Undead, piglins and illagers may spawn with a shield in their off hand and use it. */
+    /** Zombies, skeletons and piglins may spawn with a shield in their off hand and use it. */
     public static final Curse BASTION = register("bastion");
 
     /** Hostile mobs spawn twice as often. */
-    public static final Curse MYRIAD = register("myriad");
+    public static final Curse INFEST = register("infest");
 
-    /** Villages spawn with 3 Iron Golems, which take cover when the player cannot be reached. */
+    /** Villages spawn with 3 Iron Golems, which hide from ranged attackers or parry their arrows. */
     public static final Curse FORTIFIED = register("fortified");
 
     private Curses() {

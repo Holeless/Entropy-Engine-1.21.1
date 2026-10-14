@@ -1,10 +1,13 @@
 package com.example.curses.effect;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 import com.example.curses.CursesMod;
 import com.example.curses.curse.CurseData;
@@ -17,12 +20,15 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.StructureTags;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -32,16 +38,18 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 /**
- * Fortified: villages spawn with 3 Iron Golems, and Iron Golems take cover when the player they are hunting
- * cannot be reached (see {@link TakeCoverGoal}).
+ * Fortified: villages spawn with 3 Iron Golems, and Iron Golems that are hunting a player with a bow hide from
+ * them, or parry their arrows when there is nothing to hide behind (see {@link TakeCoverGoal}).
  *
  * <p><b>Village golems:</b> when a village is generated, a few ticks later (spawning during chunk loading is
  * not safe) the golems are placed in the chunk the village starts in, which is where its town centre is. They
@@ -51,11 +59,18 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
  * golems are persistent (they never despawn).</p>
  *
  * <p><b>Taking cover:</b> {@link TakeCoverGoal} is added to every Iron Golem when it joins the world.</p>
+ *
+ * <p><b>Parrying:</b> while a golem has no cover and is standing its ground, an arrow that hits it from the
+ * front is blocked {@link #PARRY_CHANCE} of the time: the hit is cancelled, so vanilla bounces the arrow off
+ * exactly like it does for a shield, and the golem swings an arm and plays the shield-block sound.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class FortifiedHandler {
     /** Iron golems a new village is topped up to. */
     public static final int VILLAGE_GOLEMS = 3;
+
+    /** Chance that a golem in parry mode bats away an arrow that hits it from the front. */
+    public static final float PARRY_CHANCE = 0.75F;
 
     private static final int SPAWN_DELAY = 20;     // ticks after the chunk loads
     private static final int GIVE_UP = 1200;       // ticks to wait for the chunk to be ready
@@ -67,6 +82,7 @@ public final class FortifiedHandler {
 
     // Server thread only.
     private static final List<Pending> PENDING = new ArrayList<>();
+    private static final Set<IronGolem> PARRYING = Collections.newSetFromMap(new WeakHashMap<>());
 
     private FortifiedHandler() {
     }
@@ -74,6 +90,15 @@ public final class FortifiedHandler {
     /** Is the Fortified curse active in the world this level belongs to? */
     static boolean enabled(Level level) {
         return level instanceof ServerLevel serverLevel && CurseData.isActive(serverLevel.getServer(), Curses.FORTIFIED);
+    }
+
+    /** Called by {@link TakeCoverGoal}: is this golem currently standing its ground and parrying arrows? */
+    static void setParrying(IronGolem golem, boolean parrying) {
+        if (parrying) {
+            PARRYING.add(golem);
+        } else {
+            PARRYING.remove(golem);
+        }
     }
 
     /**
@@ -90,7 +115,7 @@ public final class FortifiedHandler {
     }
 
     // ---------------------------------------------------------------------------------------------------
-    // Cover AI
+    // Cover AI and parrying
     // ---------------------------------------------------------------------------------------------------
 
     @SubscribeEvent
@@ -105,6 +130,36 @@ public final class FortifiedHandler {
         }
         // Priority 0 beats the golem's own movement goals, which share the MOVE flag.
         golem.goalSelector.addGoal(0, new TakeCoverGoal(golem));
+    }
+
+    @SubscribeEvent
+    public static void onIncomingDamage(LivingIncomingDamageEvent event) {
+        if (!(event.getEntity() instanceof IronGolem golem) || golem.level().isClientSide() || !PARRYING.contains(golem)) {
+            return;
+        }
+        DamageSource source = event.getSource();
+        if (!(source.getDirectEntity() instanceof AbstractArrow) || !isInFront(golem, source)) {
+            return;
+        }
+        if (golem.getRandom().nextFloat() >= PARRY_CHANCE) {
+            return;
+        }
+        // Cancelling makes the hit fail, and a failed arrow hit already bounces the arrow off in vanilla.
+        event.setCanceled(true);
+        golem.playSound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.8F + golem.getRandom().nextFloat() * 0.4F);
+        golem.level().broadcastEntityEvent(golem, (byte) 4); // swing its arms
+    }
+
+    /** Same frontal-arc test vanilla uses to decide whether a raised shield catches a hit. */
+    private static boolean isInFront(IronGolem golem, DamageSource source) {
+        Vec3 from = source.getSourcePosition();
+        if (from == null) {
+            return false;
+        }
+        Vec3 view = golem.calculateViewVector(0.0F, golem.getYHeadRot());
+        Vec3 away = from.vectorTo(golem.position());
+        away = new Vec3(away.x, 0.0, away.z).normalize();
+        return away.dot(view) < 0.0;
     }
 
     // ---------------------------------------------------------------------------------------------------
@@ -166,6 +221,7 @@ public final class FortifiedHandler {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         PENDING.clear();
+        PARRYING.clear();
     }
 
     private static void spawnGolems(ServerLevel level, Pending pending) {
