@@ -20,5 +20,8 @@
   "curse.curses.famine.description": "Hunger depletes faster",
 
   "curse.curses.quick_fuse.name": "Quick Fuse",
-  "curse.curses.quick_fuse.description": "Creepers explode faster"
+  "curse.curses.quick_fuse.description": "Creepers explode faster",
+
+  "curse.curses.deluge.name": "Deluge",
+  "curse.curses.deluge.description": "Increased chance of rain and thunderstorms"
 }

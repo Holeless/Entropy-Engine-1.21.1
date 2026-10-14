@@ -24,6 +24,9 @@ public final class Curses {
     /** Creepers explode 50% faster. */
     public static final Curse QUICK_FUSE = register("quick_fuse");
 
+    /** Rain and thunderstorms come much more often. */
+    public static final Curse DELUGE = register("deluge");
+
     private Curses() {
     }
 
