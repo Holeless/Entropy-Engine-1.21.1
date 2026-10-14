@@ -36,6 +36,9 @@ public final class Curses {
     /** Phantoms pick up creepers and drop them on players. */
     public static final Curse PAYLOAD = register("payload");
 
+    /** Players cannot sleep. */
+    public static final Curse INSOMNIA = register("insomnia");
+
     private Curses() {
     }
 

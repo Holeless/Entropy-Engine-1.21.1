@@ -32,5 +32,8 @@
   "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them",
 
   "curse.curses.payload.name": "Payload",
-  "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players"
+  "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players",
+
+  "curse.curses.insomnia.name": "Insomnia",
+  "curse.curses.insomnia.description": "Players cannot sleep"
 }
