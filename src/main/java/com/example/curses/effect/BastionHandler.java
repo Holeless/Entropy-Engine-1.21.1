@@ -56,11 +56,11 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  * arc check, the block sound, arrows bouncing off), the mobs just never raise one. This handler does, with the
  * same rules a player's shield follows:</p>
  * <ul>
- *   <li>With a target within {@link #GUARD_RANGE} blocks and in sight, the mob raises the shield for
- *       2 to 5 seconds, lowers it for roughly a second so the player gets an opening, and repeats.</li>
+ *   <li>With a target within {@link #GUARD_RANGE} blocks and in sight, the mob reacts after a moment, raises
+ *       the shield for 1 to 2 seconds, then lowers it for 2.5 to 4.5 seconds so the player gets a clear opening.</li>
  *   <li>If the target is drawing a bow, throwing a trident or holding a loaded crossbow, the mob guards from
- *       up to {@link #RANGED_GUARD_RANGE} blocks away.</li>
- *   <li>A mob with its shield up takes no knockback from hits in front of it.</li>
+ *       up to {@link #RANGED_GUARD_RANGE} blocks away, but only notices it about 30% of the time.</li>
+ *   <li>A mob with its shield up takes no knockback at all (so it does not hop when hit).</li>
  *   <li>An axe hit on a mob whose shield is up and facing the attacker disables it, as in vanilla: that hit is
  *       still blocked, then the shield drops and cannot be raised again for 5 seconds.</li>
  * </ul>
@@ -76,17 +76,21 @@ public final class BastionHandler {
     private static final String KEY_ROLLED = "curses_bastion_rolled";
 
     private static final int CHECK_INTERVAL = 2;           // ticks between guard decisions
-    private static final double GUARD_RANGE = 6.0;         // raise the shield when the target is this close
-    private static final double RANGED_GUARD_RANGE = 32.0; // ... or this close if the target is aiming something
-    private static final int HOLD_MIN = 40;                // ticks the shield stays up
-    private static final int HOLD_MAX = 100;
-    private static final int REST_MIN = 15;                // ticks it stays down afterwards
-    private static final int REST_MAX = 35;
+    private static final double GUARD_RANGE = 4.0;         // only guard when the target is about in melee range
+    private static final double RANGED_GUARD_RANGE = 16.0; // ... or this close if the target is aiming something
+    private static final float RANGED_REACT_CHANCE = 0.3F; // a mob only sometimes notices an aimed bow
+    private static final int REACT_MIN = 10;               // ticks it takes the mob to react before the shield goes up
+    private static final int REACT_MAX = 25;
+    private static final int HOLD_MIN = 20;                // ticks the shield stays up
+    private static final int HOLD_MAX = 45;
+    private static final int REST_MIN = 50;                // ticks it stays down afterwards (the player's opening)
+    private static final int REST_MAX = 90;
     private static final int DISABLE_TICKS = 100;          // an axe hit disables the shield for this long
 
     // Server thread only.
     private static final Map<Mob, Long> NEXT_CHANGE = new WeakHashMap<>();
     private static final Map<Mob, Long> DISABLED_UNTIL = new WeakHashMap<>();
+    private static final Map<Mob, Long> RAISE_AT = new WeakHashMap<>();
 
     private BastionHandler() {
     }
@@ -164,7 +168,7 @@ public final class BastionHandler {
         }
 
         long now = level.getGameTime();
-        boolean raised = mob.isUsingItem();
+        boolean raised = isRaised(mob);
         Long disabled = DISABLED_UNTIL.get(mob);
         if ((disabled != null && now < disabled) || isRanged(mob.getMainHandItem())) {
             if (raised) {
@@ -173,11 +177,13 @@ public final class BastionHandler {
             return;
         }
 
-        boolean threatened = isThreatened(mob, targetOf(mob));
+        LivingEntity target = targetOf(mob);
+        boolean threatened = isThreatened(mob, target);
         Long next = NEXT_CHANGE.get(mob);
         boolean ready = next == null || now >= next;
 
         if (raised) {
+            RAISE_AT.remove(mob);
             if (!threatened) {
                 lower(mob);
                 NEXT_CHANGE.remove(mob);
@@ -185,10 +191,36 @@ public final class BastionHandler {
                 lower(mob);
                 NEXT_CHANGE.put(mob, now + mob.getRandom().nextIntBetweenInclusive(REST_MIN, REST_MAX));
             }
-        } else if (threatened && ready) {
+            return;
+        }
+
+        if (!threatened) {
+            RAISE_AT.remove(mob);
+            return;
+        }
+        if (!ready) {
+            return;
+        }
+        // Not the fastest thinker: it takes a moment to react, and a bow aimed from afar is often ignored.
+        Long raiseAt = RAISE_AT.get(mob);
+        if (raiseAt == null) {
+            if (mob.distanceToSqr(target) > GUARD_RANGE * GUARD_RANGE && mob.getRandom().nextFloat() >= RANGED_REACT_CHANCE) {
+                NEXT_CHANGE.put(mob, now + 40);
+                return;
+            }
+            RAISE_AT.put(mob, now + mob.getRandom().nextIntBetweenInclusive(REACT_MIN, REACT_MAX));
+            return;
+        }
+        if (now >= raiseAt) {
+            RAISE_AT.remove(mob);
             mob.startUsingItem(InteractionHand.OFF_HAND);
             NEXT_CHANGE.put(mob, now + mob.getRandom().nextIntBetweenInclusive(HOLD_MIN, HOLD_MAX));
         }
+    }
+
+    /** Shield actually up (vanilla's isBlocking() only turns true a few ticks after raising, so it is not used). */
+    private static boolean isRaised(Mob mob) {
+        return mob.isUsingItem() && mob.getUsedItemHand() == InteractionHand.OFF_HAND && mob.getOffhandItem().is(Items.SHIELD);
     }
 
     private static void lower(Mob mob) {
@@ -242,7 +274,7 @@ public final class BastionHandler {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide() || !canHoldShield(mob)) {
             return;
         }
-        if (!mob.isBlocking() || !mob.getOffhandItem().is(Items.SHIELD)) {
+        if (!isRaised(mob)) {
             return;
         }
         DamageSource source = event.getSource();
@@ -259,19 +291,16 @@ public final class BastionHandler {
         mob.playSound(SoundEvents.SHIELD_BREAK, 0.8F, 0.8F + mob.level().random.nextFloat() * 0.4F);
     }
 
-    /** A mob holding its shield up is not pushed around by hits from the front (hits from behind still push it). */
+    /**
+     * A mob with its shield up is not pushed around, and above all does not hop: vanilla knockback always
+     * gives an on-ground mob an upward kick, so any knockback is cancelled while the shield is raised.
+     */
     @SubscribeEvent
     public static void onKnockBack(LivingKnockBackEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide() || !canHoldShield(mob)) {
             return;
         }
-        if (!mob.isBlocking() || !mob.getOffhandItem().is(Items.SHIELD) || mob.getUsedItemHand() != InteractionHand.OFF_HAND) {
-            return;
-        }
-        // The ratios point from the mob toward whatever hit it, so it was hit from the front when they
-        // point the way the mob is facing. Hits from behind push it as usual.
-        Vec3 view = mob.calculateViewVector(0.0F, mob.getYHeadRot());
-        if (view.x * event.getRatioX() + view.z * event.getRatioZ() > 0.0) {
+        if (isRaised(mob)) {
             event.setCanceled(true);
         }
     }
@@ -292,5 +321,6 @@ public final class BastionHandler {
     public static void onServerStopped(ServerStoppedEvent event) {
         NEXT_CHANGE.clear();
         DISABLED_UNTIL.clear();
+        RAISE_AT.clear();
     }
 }
