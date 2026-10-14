@@ -1,0 +1,65 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Needed so the release step can create a GitHub Release and attach the jar
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Verify Famine maths
+        run: |
+          mkdir -p build/sim
+          javac -d build/sim src/main/java/com/example/curses/effect/ExhaustionTracker.java tools/FamineSimulation.java
+          java -cp build/sim FamineSimulation
+
+      # Normal pushes: version comes from gradle.properties
+      - name: Build with Gradle
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: ./gradlew build
+
+      # Tag pushes (e.g. v1.2.0): the jar gets that version, i.e. curses-1.2.0.jar
+      - name: Build release with Gradle
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: ./gradlew build -Pmod_version="${GITHUB_REF_NAME#v}"
+
+      # Zipped by GitHub (artifacts always are); handy for testing normal pushes
+      - name: Upload mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: curses-mod
+          path: build/libs/*.jar
+
+      # Not zipped: the .jar is attached to the release as-is
+      - name: Publish GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/*.jar
+          generate_release_notes: true
