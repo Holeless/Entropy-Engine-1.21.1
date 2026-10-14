@@ -3,6 +3,9 @@
   "curses.create.button": "Curses (%s)",
   "curses.create.tooltip": "Choose curses that affect the whole world.",
 
+  "curses.panel.empty": "No curses chosen",
+  "curses.panel.hint": "Click a curse to see what it does",
+
   "curses.message.active": "This world is cursed: %s",
 
   "curses.command.none": "No curses are active in this world.",

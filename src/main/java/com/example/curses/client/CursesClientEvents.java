@@ -16,15 +16,12 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
-/** Adds the "Curses" button to the create-world screen and keeps the pending selection from going stale. */
+/**
+ * Hooks the create-world screen: adds the "Curses" button under "Allow Cheats" (Game tab) and the box of
+ * chosen curses next to the buttons. All layout and drawing lives in {@link CursePanel}.
+ */
 @EventBusSubscriber(value = Dist.CLIENT, modid = CursesMod.MOD_ID)
 public final class CursesClientEvents {
-    private static final int BUTTON_WIDTH = 100;
-    private static final int MIN_BUTTON_WIDTH = 40;
-    // The create-world footer holds two 150px buttons with an 8px gap: 308px wide, centred.
-    private static final int FOOTER_HALF_WIDTH = 154;
-    private static final int GAP = 8;
-
     private CursesClientEvents() {
     }
 
@@ -34,29 +31,39 @@ public final class CursesClientEvents {
             return;
         }
 
-        // Next to the Create / Cancel buttons, on whichever side has more room
-        int centre = screen.width / 2;
-        int rightX = centre + FOOTER_HALF_WIDTH + GAP;
-        int rightSpace = screen.width - rightX - 6;
-        int leftSpace = centre - FOOTER_HALF_WIDTH - GAP - 6;
-
-        int x;
-        int width;
-        if (rightSpace >= leftSpace) {
-            width = Math.max(MIN_BUTTON_WIDTH, Math.min(BUTTON_WIDTH, rightSpace));
-            x = rightX;
-        } else {
-            width = Math.max(MIN_BUTTON_WIDTH, Math.min(BUTTON_WIDTH, leftSpace));
-            x = centre - FOOTER_HALF_WIDTH - GAP - width;
-        }
-
+        // Position and size are set every frame by CursePanel.layout (it follows the Allow Cheats button),
+        // and the button is hidden whenever the Game tab is not the open tab.
         Button button = Button.builder(
                         Component.translatable("curses.create.button", PendingCurses.count()),
                         pressed -> Minecraft.getInstance().setScreen(new CurseSelectionScreen(screen)))
-                .bounds(x, screen.height - 27, width, 20)
+                .bounds(0, 0, 210, 20)
                 .tooltip(Tooltip.create(Component.translatable("curses.create.tooltip")))
                 .build();
+        button.visible = false;
+        CursePanel.attach(screen, button);
         event.addListener(button);
+    }
+
+    @SubscribeEvent
+    public static void onRenderPre(ScreenEvent.Render.Pre event) {
+        if (event.getScreen() instanceof CreateWorldScreen screen) {
+            CursePanel.layout(screen);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderPost(ScreenEvent.Render.Post event) {
+        if (event.getScreen() instanceof CreateWorldScreen) {
+            CursePanel.render(event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+        if (event.getScreen() instanceof CreateWorldScreen && event.getButton() == 0
+                && CursePanel.mouseClicked(event.getMouseX(), event.getMouseY())) {
+            event.setCanceled(true);
+        }
     }
 
     /**
@@ -68,6 +75,7 @@ public final class CursesClientEvents {
         Screen next = event.getNewScreen();
         if (next instanceof TitleScreen || next instanceof SelectWorldScreen) {
             PendingCurses.clear();
+            CursePanel.detach();
         }
     }
 }
