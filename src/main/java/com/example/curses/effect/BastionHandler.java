@@ -179,7 +179,9 @@ public final class BastionHandler {
     /** The mob's attack target. Piglins keep theirs in the brain instead of the usual target field. */
     private static LivingEntity targetOf(Mob mob) {
         LivingEntity target = mob.getTarget();
-        if (target == null) {
+        // Only piglins have this memory registered; asking any other brain for it throws.
+        if (target == null && mob instanceof AbstractPiglin
+                && mob.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
             target = mob.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
         }
         return target;
