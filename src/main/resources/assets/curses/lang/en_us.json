@@ -23,5 +23,8 @@
   "curse.curses.quick_fuse.description": "Creepers explode faster",
 
   "curse.curses.deluge.name": "Deluge",
-  "curse.curses.deluge.description": "Increased chance of rain and thunderstorms"
+  "curse.curses.deluge.description": "Increased chance of rain and thunderstorms",
+
+  "curse.curses.hypocrisy.name": "Hypocrisy",
+  "curse.curses.hypocrisy.description": "Undead, Piglins and Illagers have a chance to spawn with a Totem of Undying"
 }

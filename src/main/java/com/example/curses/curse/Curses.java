@@ -27,6 +27,9 @@ public final class Curses {
     /** Rain and thunderstorms come much more often. */
     public static final Curse DELUGE = register("deluge");
 
+    /** Undead, piglins and illagers may spawn with a Totem of Undying. */
+    public static final Curse HYPOCRISY = register("hypocrisy");
+
     private Curses() {
     }
 
