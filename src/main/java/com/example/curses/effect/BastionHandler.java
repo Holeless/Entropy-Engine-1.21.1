@@ -24,6 +24,7 @@ import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.piglin.AbstractPiglin;
 import net.minecraft.world.entity.npc.AbstractVillager;
+import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
@@ -60,7 +61,8 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  *       the shield for 1 to 2 seconds, then lowers it for 2.5 to 4.5 seconds so the player gets a clear opening.</li>
  *   <li>If the target is drawing a bow, throwing a trident or holding a loaded crossbow, the mob guards from
  *       up to {@link #RANGED_GUARD_RANGE} blocks away, but only notices it about 30% of the time.</li>
- *   <li>A mob with its shield up takes no knockback at all (so it does not hop when hit).</li>
+ *   <li>Hits from the front are blocked with the shield-block sound (not the mob's hurt sound), and a mob with
+ *       its shield up takes no knockback at all, so it does not hop when hit.</li>
  *   <li>An axe hit on a mob whose shield is up and facing the attacker disables it, as in vanilla: that hit is
  *       still blocked, then the shield drops and cannot be raised again for 5 seconds.</li>
  * </ul>
@@ -266,9 +268,17 @@ public final class BastionHandler {
     }
 
     // ---------------------------------------------------------------------------------------------------
-    // Axes beat shields
+    // Blocking (and axes beating shields)
     // ---------------------------------------------------------------------------------------------------
 
+    /**
+     * Blocks hits from the front while the shield is up. Vanilla's own block check only works a few ticks after
+     * the shield is raised and still lets the mob play its normal hurt sound (the zombie groan), so the block is
+     * done here instead: the hit is cancelled outright (no damage, no knockback, arrows bounce off) and the
+     * shield-block sound is played in place of the hurt sound.
+     *
+     * <p>Axes still beat shields: that hit is blocked too, then the shield breaks for {@link #DISABLE_TICKS}.</p>
+     */
     @SubscribeEvent
     public static void onIncomingDamage(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide() || !canHoldShield(mob)) {
@@ -279,16 +289,19 @@ public final class BastionHandler {
         }
         DamageSource source = event.getSource();
         if (source.is(DamageTypeTags.BYPASSES_SHIELD)
-                || !(source.getDirectEntity() instanceof LivingEntity attacker)
-                || !(attacker.getMainHandItem().getItem() instanceof AxeItem)
+                || (source.getDirectEntity() instanceof AbstractArrow arrow && arrow.getPierceLevel() > 0)
                 || !isInFront(mob, source)) {
             return;
         }
 
-        // Like vanilla's axe vs. shield: this hit is still blocked, then the shield drops (the next guard
-        // check lowers it) and stays down for DISABLE_TICKS.
-        DISABLED_UNTIL.put(mob, mob.level().getGameTime() + DISABLE_TICKS);
-        mob.playSound(SoundEvents.SHIELD_BREAK, 0.8F, 0.8F + mob.level().random.nextFloat() * 0.4F);
+        event.setCanceled(true);
+        if (source.getDirectEntity() instanceof LivingEntity attacker && attacker.getMainHandItem().getItem() instanceof AxeItem) {
+            // The next guard check lowers the shield; it stays down for DISABLE_TICKS.
+            DISABLED_UNTIL.put(mob, mob.level().getGameTime() + DISABLE_TICKS);
+            mob.playSound(SoundEvents.SHIELD_BREAK, 0.8F, 0.8F + mob.level().random.nextFloat() * 0.4F);
+        } else {
+            mob.playSound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.8F + mob.level().random.nextFloat() * 0.4F);
+        }
     }
 
     /**

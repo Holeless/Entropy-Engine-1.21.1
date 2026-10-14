@@ -24,6 +24,9 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
  * mob: when a hit would kill it, the totem is used up, health is set to 1 and it gets Regeneration,
  * Absorption and Fire Resistance, with the usual totem particles and sound. So giving the totem is enough.
  * Piglins would throw it away, which {@code PiglinAiMixin} prevents.</p>
+ *
+ * <p>Skeletons are included like every other undead mob. Every successful roll is written to the debug log
+ * ("Hypocrisy: gave a totem to ..."), so you can check in the console that skeletons do get them.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class HypocrisyHandler {
@@ -55,5 +58,6 @@ public final class HypocrisyHandler {
 
         mob.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
         mob.setDropChance(EquipmentSlot.OFFHAND, 0.0F); // the curse's totem is not loot
+        CursesMod.LOGGER.debug("Hypocrisy: gave a totem to {} at {}", mob.getType(), mob.blockPosition());
     }
 }
