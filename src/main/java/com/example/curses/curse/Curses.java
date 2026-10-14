@@ -30,6 +30,9 @@ public final class Curses {
     /** Undead, piglins and illagers may spawn with a Totem of Undying. */
     public static final Curse HYPOCRISY = register("hypocrisy");
 
+    /** Spiders leave webs in their wake and try to catch players with them. */
+    public static final Curse ENTANGLE = register("entangle");
+
     private Curses() {
     }
 

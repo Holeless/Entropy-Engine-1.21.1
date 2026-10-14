@@ -26,5 +26,8 @@
   "curse.curses.deluge.description": "Increased chance of rain and thunderstorms",
 
   "curse.curses.hypocrisy.name": "Hypocrisy",
-  "curse.curses.hypocrisy.description": "Undead, Piglins and Illagers have a chance to spawn with a Totem of Undying"
+  "curse.curses.hypocrisy.description": "Undead, Piglins and Illagers have a chance to spawn with a Totem of Undying",
+
+  "curse.curses.entangle.name": "Entangle",
+  "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them"
 }
