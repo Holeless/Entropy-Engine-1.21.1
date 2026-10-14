@@ -49,12 +49,12 @@ jobs:
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: ./gradlew build -Pmod_version="${GITHUB_REF_NAME#v}"
 
-      # Zipped by GitHub (artifacts always are); handy for testing normal pushes
+      # archive: false uploads the jar as-is (no zip). It downloads as curses-<version>.jar.
       - name: Upload mod jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: curses-mod
-          path: build/libs/*.jar
+          path: build/libs/curses-*.jar
+          archive: false
 
       # Not zipped: the .jar is attached to the release as-is
       - name: Publish GitHub Release
