@@ -17,5 +17,8 @@
   "curses.command.unknown": "Unknown curse: %s",
 
   "curse.curses.famine.name": "Famine",
-  "curse.curses.famine.description": "Hunger depletes faster"
+  "curse.curses.famine.description": "Hunger depletes faster",
+
+  "curse.curses.quick_fuse.name": "Quick Fuse",
+  "curse.curses.quick_fuse.description": "Creepers explode faster"
 }

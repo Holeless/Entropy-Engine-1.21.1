@@ -21,6 +21,9 @@ public final class Curses {
     /** Hunger depletes 50% faster. */
     public static final Curse FAMINE = register("famine");
 
+    /** Creepers explode 50% faster. */
+    public static final Curse QUICK_FUSE = register("quick_fuse");
+
     private Curses() {
     }
 
