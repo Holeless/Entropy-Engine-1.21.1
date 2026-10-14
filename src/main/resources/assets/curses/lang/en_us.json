@@ -1,4 +1,6 @@
 {
+  "item.curses.molotov": "Molotov Cocktail",
+
   "curses.screen.title": "Curses",
   "curses.create.button": "Curses (%s)",
   "curses.create.tooltip": "Choose curses that affect the whole world.",
@@ -45,6 +47,15 @@
 
   "curse.curses.nocturne.name": "Nocturne",
   "curse.curses.nocturne.description": "Phantoms spawn every night regardless of sleep, and in caves too",
+
+  "curse.curses.unity.name": "Unity",
+  "curse.curses.unity.description": "Hostile mobs never get aggravated at each other",
+
+  "curse.curses.coven.name": "Coven",
+  "curse.curses.coven.description": "Witches buff other mobs with splash potions, throw from further away and can throw lingering potions",
+
+  "curse.curses.incendiary.name": "Incendiary",
+  "curse.curses.incendiary.description": "Witches can throw Molotov Cocktails. Creepers cause fire when they explode",
 
   "curse.curses.fortified.name": "Fortified",
   "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down"

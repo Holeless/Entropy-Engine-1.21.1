@@ -51,6 +51,15 @@ public final class Curses {
     /** Phantoms spawn every night regardless of sleep, and in caves too. */
     public static final Curse NOCTURNE = register("nocturne");
 
+    /** Hostile mobs never get aggravated at each other. */
+    public static final Curse UNITY = register("unity");
+
+    /** Witches buff other mobs with splash potions, throw from further away and can throw lingering potions. */
+    public static final Curse COVEN = register("coven");
+
+    /** Witches can throw Molotov Cocktails; creepers cause fire when they explode. */
+    public static final Curse INCENDIARY = register("incendiary");
+
     private Curses() {
     }
 
