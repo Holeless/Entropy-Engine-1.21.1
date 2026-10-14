@@ -43,6 +43,9 @@
   "curse.curses.infest.name": "Infest",
   "curse.curses.infest.description": "Increase hostile mob spawn rate",
 
+  "curse.curses.nocturne.name": "Nocturne",
+  "curse.curses.nocturne.description": "Phantoms spawn every night regardless of sleep, and in caves too",
+
   "curse.curses.fortified.name": "Fortified",
   "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down"
 }

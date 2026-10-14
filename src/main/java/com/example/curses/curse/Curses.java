@@ -48,6 +48,9 @@ public final class Curses {
     /** Villages spawn with 3 Iron Golems; an angered golem hides from a player who is out of its reach. */
     public static final Curse FORTIFIED = register("fortified");
 
+    /** Phantoms spawn every night regardless of sleep, and in caves too. */
+    public static final Curse NOCTURNE = register("nocturne");
+
     private Curses() {
     }
 
