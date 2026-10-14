@@ -7,13 +7,9 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.Path;
@@ -21,10 +17,9 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Fortified: an Iron Golem that is hunting a player it cannot reach, because they are standing more than 2
- * blocks above it (a pillar, a ledge) and holding a bow, crossbow or trident, does not stand around under
- * them. A player on the ground is never hidden from: the golem always goes for them. Against a player up in
- * the air it commits to one of two things and sticks with it:
+ * Fortified: Iron Golems are completely normal, except in one situation. A golem that is angry at a player
+ * (because the player hit it) and cannot get to them, because the player is standing well above it (a tower,
+ * a pillar, a ledge) and the golem has no path up, runs away and hides so it cannot be shot at.
  *
  * <ol>
  *   <li><b>Hide.</b> It looks for a spot it can walk to (up to 14 blocks away) where <i>no part of its body</i>
@@ -32,36 +27,37 @@ import net.minecraft.world.phys.Vec3;
  *       and that is at least 8 blocks from the player sideways. In a village that is the far side of a house.
  *       It runs there and stays put. If the player moves and the spot stops being hidden, it moves to a new
  *       one.</li>
- *   <li><b>Parry.</b> If there is nothing to hide behind (open field) it stands its ground facing the player,
- *       and arrows that hit it from the front are batted away most of the time (see
- *       {@link FortifiedHandler}).</li>
+ *   <li><b>Retreat.</b> If there is nothing to hide behind (open field) it simply runs away from the player,
+ *       up to 40 blocks, and keeps looking for cover on the way.</li>
  * </ol>
  *
  * <p>The goal ends, and the golem goes back to its normal attack goals (aimed at the player), as soon as the
- * player has been back within reach for a second, or has not held a ranged weapon for 5 seconds, or the golem
- * is no longer angry at them. After it ends it will not start again for 5 seconds.</p>
+ * player has been back within reach (not above the golem any more, or reachable on foot) for a second, or
+ * the golem is no longer angry at them. After it ends it will not start again for 5 seconds.</p>
  *
- * <p>Pathfinding is deliberately not used to decide reachability: it only looks about 16 blocks, so "can
- * reach" flipped between yes and no as the golem moved and made it run back and forth.</p>
+ * <p>A player on the ground is never hidden from. No weapon is needed to trigger it. Golems have no shield
+ * and no parry: when they cannot hide they just run.</p>
  *
  * <p>Added to every Iron Golem; it does nothing while the Fortified curse is off. Priority 0 so it beats the
  * golem's own movement goals, which share the MOVE flag.</p>
  */
 public class TakeCoverGoal extends Goal {
     private static final double MAX_PLAYER_DIST = 48.0;
-    private static final double ELEVATED = 2.0;        // player feet this far above the golem's feet = out of reach
+    private static final double ELEVATED = 2.0;        // player feet this far above the golem's feet = maybe out of reach
     private static final double MIN_COVER_DIST = 8.0;   // cover must be this far from the player sideways
+    private static final double SAFE_DISTANCE = 40.0;   // with no cover, run until this far away
     private static final int START_CHECK_CALLS = 5;     // canUse calls between checks (about 10 ticks)
-    private static final int ARMED_CHECKS = 2;          // consecutive checks with a ranged weapon before hiding
+    private static final int UNREACHABLE_CHECKS = 2;    // consecutive checks "player cannot be reached" before hiding
     private static final int RUN_CHECK_TICKS = 5;       // ticks between decisions while the goal is running
-    private static final int GROUNDED_RELEASE = 20;     // ticks back down within reach before it comes out
-    private static final int UNARMED_RELEASE = 100;     // ticks without a ranged weapon before it comes out
+    private static final int PATH_RECHECK = 4;          // decisions between reachability (path) checks while running
+    private static final int GROUNDED_RELEASE = 20;     // ticks back within reach before it comes out
     private static final int COOLDOWN = 100;            // ticks before it may hide again after coming out
     private static final int SEARCH_TRIES = 48;
     private static final int SEARCH_RADIUS = 14;        // path finding only reaches about 16 blocks
     private static final int FULL_CHECKS = 6;           // best candidates that get the full-body visibility test
     private static final int PATH_VALIDATIONS = 3;      // best hidden candidates that get a (costly) path check
     private static final int SEARCH_RETRY = 40;         // ticks to wait before searching again after finding nothing
+    private static final int FLEE_RETRY = 20;           // ticks between cover searches while retreating
     private static final double SPEED = 1.3;
 
     // Rays are sent to these points on the golem (about 1.4 wide, 2.7 tall); all of them must be blocked.
@@ -74,11 +70,12 @@ public class TakeCoverGoal extends Goal {
     private final IronGolem golem;
     private Player player;
     private int startDelay;
-    private int armedStreak;
+    private int unreachableStreak;
     private int runDelay;
+    private int pathDelay;
     private int searchWait;
-    private int unarmed;
     private int grounded;
+    private boolean outOfReach;
     private long readyAt;
     private Vec3 destination;
     private boolean done;
@@ -92,12 +89,13 @@ public class TakeCoverGoal extends Goal {
     @Override
     public boolean canUse() {
         if (!golem.isAlive() || !FortifiedHandler.enabled(golem.level())) {
-            armedStreak = 0;
+            unreachableStreak = 0;
             return false;
         }
+        // Only a player the golem is actually fighting (i.e. one that hit it) matters here.
         if (!(golem.getTarget() instanceof Player target) || !target.isAlive() || target.isSpectator() || target.isCreative()
                 || golem.distanceToSqr(target) > MAX_PLAYER_DIST * MAX_PLAYER_DIST) {
-            armedStreak = 0;
+            unreachableStreak = 0;
             return false;
         }
         if (golem.level().getGameTime() < readyAt) {
@@ -108,11 +106,11 @@ public class TakeCoverGoal extends Goal {
         }
         startDelay = START_CHECK_CALLS;
 
-        if (!isArmed(target) || !isElevated(target)) {
-            armedStreak = 0;
+        if (!isElevated(target) || canReachOnFoot(target)) {
+            unreachableStreak = 0;
             return false;
         }
-        if (++armedStreak < ARMED_CHECKS) {
+        if (++unreachableStreak < UNREACHABLE_CHECKS) {
             return false;
         }
         player = target;
@@ -138,19 +136,19 @@ public class TakeCoverGoal extends Goal {
     public void start() {
         done = false;
         runDelay = 0;
+        pathDelay = PATH_RECHECK;
         searchWait = 0;
-        unarmed = 0;
         grounded = 0;
+        outOfReach = true;
         destination = null;
     }
 
     @Override
     public void stop() {
         golem.getNavigation().stop();
-        FortifiedHandler.setParrying(golem, false);
         player = null;
         destination = null;
-        armedStreak = 0;
+        unreachableStreak = 0;
         startDelay = START_CHECK_CALLS;
         done = false;
     }
@@ -180,22 +178,21 @@ public class TakeCoverGoal extends Goal {
         }
         runDelay = RUN_CHECK_TICKS;
 
+        // Is the player still out of reach? Elevation is cheap and checked every time; the path check is
+        // costlier, so its answer is kept between checks.
+        if (!isElevated(player)) {
+            outOfReach = false;
+        } else if (--pathDelay <= 0) {
+            pathDelay = PATH_RECHECK;
+            outOfReach = !canReachOnFoot(player);
+        }
+
         // The player came back down within reach: the golem always goes for a player it can reach.
-        if (isElevated(player)) {
+        if (outOfReach) {
             grounded = 0;
         } else {
             grounded += RUN_CHECK_TICKS;
             if (grounded >= GROUNDED_RELEASE) {
-                release();
-                return;
-            }
-        }
-        // The player put the bow away for a while: come out.
-        if (isArmed(player)) {
-            unarmed = 0;
-        } else {
-            unarmed += RUN_CHECK_TICKS;
-            if (unarmed >= UNARMED_RELEASE) {
                 release();
                 return;
             }
@@ -205,13 +202,11 @@ public class TakeCoverGoal extends Goal {
         if (isHidden(golem.position())) {
             golem.getNavigation().stop();
             destination = null;
-            FortifiedHandler.setParrying(golem, false);
             return;
         }
 
         // Still on its way to a spot that is good: keep going.
         if (destination != null && !golem.getNavigation().isDone() && isHidden(destination)) {
-            FortifiedHandler.setParrying(golem, false);
             return;
         }
         destination = null;
@@ -224,28 +219,30 @@ public class TakeCoverGoal extends Goal {
         Vec3 cover = findCover();
         if (cover != null && golem.getNavigation().moveTo(cover.x, cover.y, cover.z, SPEED)) {
             destination = cover;
-            FortifiedHandler.setParrying(golem, false);
             return;
         }
 
-        // Nothing to hide behind: stand and parry arrows. Look again for cover in a moment.
+        // Nothing to hide behind: run away from the player, and look for cover again on the way.
+        if (horizontalDistance(golem.position(), player) < SAFE_DISTANCE) {
+            Vec3 away = DefaultRandomPos.getPosAway(golem, 16, 7, player.position());
+            if (away != null && golem.getNavigation().moveTo(away.x, away.y, away.z, SPEED)) {
+                searchWait = FLEE_RETRY;
+                return;
+            }
+        }
         golem.getNavigation().stop();
-        FortifiedHandler.setParrying(golem, true);
         searchWait = SEARCH_RETRY;
     }
 
-    /** Standing well above the golem (a pillar, a ledge): it cannot climb up, so being near does not make it safe to approach. */
+    /** Standing well above the golem (a pillar, a ledge). */
     private boolean isElevated(Player p) {
         return p.getY() - golem.getY() > ELEVATED;
     }
 
-    private static boolean isArmed(Player p) {
-        return isRanged(p.getMainHandItem()) || isRanged(p.getOffhandItem());
-    }
-
-    private static boolean isRanged(ItemStack stack) {
-        Item item = stack.getItem();
-        return item instanceof BowItem || item instanceof CrossbowItem || item instanceof TridentItem;
+    /** Can the golem walk to the player? (Used only once the player is elevated, and with hysteresis by the callers.) */
+    private boolean canReachOnFoot(Player p) {
+        Path path = golem.getNavigation().createPath(p, 0);
+        return path != null && path.canReach();
     }
 
     /** Far enough from the player sideways, and no part of a golem standing at feet can be seen by the player. */

@@ -45,7 +45,7 @@ public final class Curses {
     /** Hostile mobs spawn twice as often. */
     public static final Curse INFEST = register("infest");
 
-    /** Villages spawn with 3 Iron Golems, which hide from ranged attackers or parry their arrows. */
+    /** Villages spawn with 3 Iron Golems; an angered golem hides from a player who is out of its reach. */
     public static final Curse FORTIFIED = register("fortified");
 
     private Curses() {

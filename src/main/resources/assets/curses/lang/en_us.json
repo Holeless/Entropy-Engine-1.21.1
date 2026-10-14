@@ -38,11 +38,11 @@
   "curse.curses.insomnia.description": "Players cannot sleep",
 
   "curse.curses.bastion.name": "Bastion",
-  "curse.curses.bastion.description": "Zombies, Skeletons and Piglins have a chance to spawn with a shield in their off hand and use it accordingly",
+  "curse.curses.bastion.description": "Zombies, Skeletons and Piglins have a chance to spawn with a shield in their off hand and use it like a player would",
 
   "curse.curses.infest.name": "Infest",
   "curse.curses.infest.description": "Increase hostile mob spawn rate",
 
   "curse.curses.fortified.name": "Fortified",
-  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. Iron Golems hide from players holding a bow who are out of reach above them, or parry arrows when there is nothing to hide behind"
+  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down"
 }

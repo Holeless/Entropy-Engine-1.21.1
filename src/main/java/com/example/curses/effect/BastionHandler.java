@@ -17,9 +17,13 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.animal.AbstractGolem;
+import net.minecraft.world.entity.monster.AbstractIllager;
 import net.minecraft.world.entity.monster.AbstractSkeleton;
+import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.piglin.AbstractPiglin;
+import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
@@ -38,19 +42,19 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 /**
  * Bastion: zombies, skeletons and piglins have a 15% chance to spawn with a shield in their off hand, and they
- * raise it when it makes sense.
+ * use it the way a player would.
  *
- * <p><b>Who can get one:</b> zombies (husks, drowned, zombie villagers and zombified piglins included),
- * skeletons (strays, wither skeletons, boggeds) and piglins (brutes too). Illagers are not affected.
- * Creatures that cannot visibly hold an item (phantoms, horses, zoglins...) are left alone. Each mob rolls
+ * <p><b>Who can get one:</b> only mobs that visibly hold items in their hands: zombies (husks, drowned,
+ * zombie villagers and zombified piglins included), skeletons (strays, wither skeletons, boggeds) and piglins
+ * (brutes too). Mobs with crossed arms (villagers, wandering traders, illagers, witches) and mobs that cannot
+ * hold anything (golems, phantoms, horses, zoglins...) never get one, see {@link #canHoldShield}. Each mob rolls
  * once (remembered in its saved data). A mob that is already holding something in its off hand, or that
  * carries a bow, crossbow or trident (those need the same "using item" state as a shield and would fight
- * over it), does not get one. Ordinary skeletons and strays always carry a bow, so in practice it is
- * zombies, piglins with a sword, and wither skeletons that show a shield. The shield is not dropped on
- * death.</p>
+ * over it), does not get one. The shield is not dropped on death.</p>
  *
  * <p><b>How they use it:</b> vanilla already blocks with any living entity's raised shield (the frontal
- * arc check, the block sound, arrows bouncing off), the mobs just never raise one. This handler does:</p>
+ * arc check, the block sound, arrows bouncing off), the mobs just never raise one. This handler does, with the
+ * same rules a player's shield follows:</p>
  * <ul>
  *   <li>With a target within {@link #GUARD_RANGE} blocks and in sight, the mob raises the shield for
  *       2 to 5 seconds, lowers it for roughly a second so the player gets an opening, and repeats.</li>
@@ -88,7 +92,19 @@ public final class BastionHandler {
     }
 
     private static boolean isEligible(Mob mob) {
-        return mob instanceof Zombie || mob instanceof AbstractSkeleton || mob instanceof AbstractPiglin;
+        return (mob instanceof Zombie || mob instanceof AbstractSkeleton || mob instanceof AbstractPiglin)
+                && canHoldShield(mob);
+    }
+
+    /**
+     * Can this mob visibly hold a shield? Mobs with crossed arms (villagers, traders, illagers, witches) and
+     * golems cannot: their model does not show the item in hand and a raised shield would make no sense.
+     */
+    private static boolean canHoldShield(Mob mob) {
+        return !(mob instanceof AbstractVillager
+                || mob instanceof AbstractIllager
+                || mob instanceof Witch
+                || mob instanceof AbstractGolem);
     }
 
     /** Bows, crossbows and tridents use the same "using item" state as a shield, so they cannot be combined. */
@@ -132,6 +148,9 @@ public final class BastionHandler {
             return;
         }
         if (mob.tickCount % CHECK_INTERVAL != 0 || !mob.isAlive() || !mob.getOffhandItem().is(Items.SHIELD)) {
+            return;
+        }
+        if (!canHoldShield(mob)) {
             return;
         }
         ServerLevel level = (ServerLevel) mob.level();
@@ -220,7 +239,7 @@ public final class BastionHandler {
 
     @SubscribeEvent
     public static void onIncomingDamage(LivingIncomingDamageEvent event) {
-        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) {
+        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide() || !canHoldShield(mob)) {
             return;
         }
         if (!mob.isBlocking() || !mob.getOffhandItem().is(Items.SHIELD)) {
@@ -243,7 +262,7 @@ public final class BastionHandler {
     /** A mob holding its shield up is not pushed around by hits from the front (hits from behind still push it). */
     @SubscribeEvent
     public static void onKnockBack(LivingKnockBackEvent event) {
-        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) {
+        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide() || !canHoldShield(mob)) {
             return;
         }
         if (!mob.isBlocking() || !mob.getOffhandItem().is(Items.SHIELD) || mob.getUsedItemHand() != InteractionHand.OFF_HAND) {
