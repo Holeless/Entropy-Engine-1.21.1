@@ -69,6 +69,12 @@ public final class Curses {
     /** Blazes and magma cubes spawn in lava pools in the overworld. */
     public static final Curse INFERNO = register("inferno");
 
+    /** Armor and tools have 2/3 of their durability, so they wear out faster. */
+    public static final Curse BRITTLE = register("brittle");
+
+    /** Hostile mobs have double detection range. */
+    public static final Curse SAGACIOUS = register("sagacious");
+
     private Curses() {
     }
 

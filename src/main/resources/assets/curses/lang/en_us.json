@@ -37,7 +37,7 @@
   "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them",
 
   "curse.curses.payload.name": "Payload",
-  "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players",
+  "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players. If you wall yourself in, they blast through your roof",
 
   "curse.curses.insomnia.name": "Insomnia",
   "curse.curses.insomnia.description": "Players cannot sleep",
@@ -58,17 +58,23 @@
   "curse.curses.coven.description": "Witches buff other mobs with splash potions, throw from further away and can throw lingering potions",
 
   "curse.curses.incendiary.name": "Incendiary",
-  "curse.curses.incendiary.description": "Witches can throw Molotov Cocktails. Creepers cause fire when they explode",
+  "curse.curses.incendiary.description": "Witches can throw Molotov Cocktails, and use them to burn down any shelter you hide in. Creepers cause fire when they explode",
 
   "curse.curses.fortified.name": "Fortified",
   "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down",
 
   "curse.curses.ordnance.name": "Ordnance",
-  "curse.curses.ordnance.description": "Skeletons have a chance of shooting an exploding arrow. Witches may throw dynamite",
+  "curse.curses.ordnance.description": "Skeletons may carry exploding arrows and witches may throw dynamite. If you wall yourself in, they use them to blast their way to you",
 
   "curse.curses.warping.name": "Warping",
   "curse.curses.warping.description": "Undead and Piglins have a chance to spawn with an Ender Pearl in their off hand, which they will use to get to you",
 
   "curse.curses.inferno.name": "Inferno",
-  "curse.curses.inferno.description": "Blazes and Magma Cubes spawn in lava pools in the overworld"
+  "curse.curses.inferno.description": "Blazes and Magma Cubes spawn in lava pools in the overworld",
+
+  "curse.curses.brittle.name": "Brittle",
+  "curse.curses.brittle.description": "Armor and tools lose durability faster",
+
+  "curse.curses.sagacious.name": "Sagacious",
+  "curse.curses.sagacious.description": "Hostile mobs have double detection range"
 }

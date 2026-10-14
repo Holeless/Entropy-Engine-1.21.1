@@ -17,6 +17,7 @@ import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -39,6 +40,11 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  * even if the phantom's move control has been swapped out) to a point above the player. When it is overhead
  * and high enough the creeper is released with its fuse already lit, so it explodes on or next to the player.
  * A carried creeper takes no fall damage.
+ *
+ * <b>Siege:</b> a phantom that has been near a player for a few seconds without being able to see them (they are
+ * under a roof) is "besieging" that player, see {@link #siegeVictim}. It does not need a target for that, since
+ * vanilla drops targets a phantom cannot see. A besieging phantom always goes for a creeper, searches wider, and
+ * carries it to just above the roof (see {@link #targetY}) so the lit creeper lands on the roof and blows it open.
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class PayloadHandler {
@@ -60,19 +66,34 @@ public final class PayloadHandler {
     private static final int CARRY_TIMEOUT = 500;
     private static final double CARRY_SPEED = 0.45;     // blocks per tick, about 9 blocks/second
 
+    private static final double SIEGE_RANGE = 40.0;     // a player this close that the phantom cannot see...
+    private static final int SIEGE_CHECK = 10;          // ... checked this often ...
+    private static final int SIEGE_TICKS = 60;          // ... for this long, means the player is sealed in
+    private static final double ROOF_CLEARANCE = 3.0;   // siege drops start this far above the highest block
+    private static final double ROOF_MAX_HEIGHT = 16.0; // ... if that is no more than this above the player
+
     private static final class Carry {
         final Creeper creeper;
         final Player victim;
+        final boolean siege;
         int ticks;
 
-        Carry(Creeper creeper, Player victim) {
+        Carry(Creeper creeper, Player victim, boolean siege) {
             this.creeper = creeper;
             this.victim = victim;
+            this.siege = siege;
         }
+    }
+
+    /** How long a phantom has been near a player it cannot see. */
+    private static final class Blocked {
+        Player player;
+        int ticks;
     }
 
     // Server thread only.
     private static final Map<Phantom, Carry> CARRYING = new WeakHashMap<>();
+    private static final Map<Phantom, Blocked> BLOCKED = new WeakHashMap<>();
 
     private PayloadHandler() {
     }
@@ -80,6 +101,19 @@ public final class PayloadHandler {
     /** Is the Payload curse active in the world this level belongs to? */
     static boolean enabled(Level level) {
         return level instanceof ServerLevel serverLevel && CurseData.isActive(serverLevel.getServer(), Curses.PAYLOAD);
+    }
+
+    /**
+     * The player this phantom is besieging: close by, but out of its sight for a few seconds (a roof or walls
+     * in the way), or null.
+     */
+    static Player siegeVictim(Phantom phantom) {
+        Blocked blocked = BLOCKED.get(phantom);
+        if (blocked == null || blocked.ticks < SIEGE_TICKS || blocked.player == null) {
+            return null;
+        }
+        Player player = blocked.player;
+        return player.isAlive() && !player.isSpectator() && player.level() == phantom.level() ? player : null;
     }
 
     @SubscribeEvent
@@ -101,15 +135,17 @@ public final class PayloadHandler {
     }
 
     /** Called by {@link PayloadGoal} the moment the creeper is mounted. */
-    static void beginCarry(Phantom phantom, Creeper creeper, Player victim) {
+    static void beginCarry(Phantom phantom, Creeper creeper, Player victim, boolean siege) {
         creeper.getPersistentData().putBoolean(CARRIED, true);
-        CARRYING.put(phantom, new Carry(creeper, victim));
-        CursesMod.LOGGER.debug("Payload: phantom {} is carrying creeper {}", phantom.getId(), creeper.getId());
+        CARRYING.put(phantom, new Carry(creeper, victim, siege));
+        CursesMod.LOGGER.debug("Payload: phantom {} is carrying creeper {}{}", phantom.getId(), creeper.getId(),
+                siege ? " to a sealed-in player" : "");
     }
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         CARRYING.clear();
+        BLOCKED.clear();
     }
 
     @SubscribeEvent
@@ -120,7 +156,28 @@ public final class PayloadHandler {
         Carry carry = CARRYING.get(phantom);
         if (carry != null) {
             tickCarry(phantom, carry);
+        } else {
+            updateBlocked(phantom);
         }
+    }
+
+    /** Tracks how long the phantom has been near a player without seeing them. */
+    private static void updateBlocked(Phantom phantom) {
+        if (phantom.tickCount % SIEGE_CHECK != 0) {
+            return;
+        }
+        if (!enabled(phantom.level())) {
+            BLOCKED.remove(phantom);
+            return;
+        }
+        Player near = phantom.level().getNearestPlayer(phantom, SIEGE_RANGE);
+        if (near == null || near.isCreative() || near.isSpectator() || phantom.hasLineOfSight(near)) {
+            BLOCKED.remove(phantom);
+            return;
+        }
+        Blocked blocked = BLOCKED.computeIfAbsent(phantom, p -> new Blocked());
+        blocked.player = near;
+        blocked.ticks += SIEGE_CHECK;
     }
 
     private static void tickCarry(Phantom phantom, Carry c) {
@@ -153,8 +210,8 @@ public final class PayloadHandler {
         // ticks on its own, so it is switched off again every tick.
         phantom.goalSelector.disableControlFlag(Goal.Flag.MOVE);
 
-        double dropH = dropHeight(phantom.level(), victim);
-        Vec3 target = new Vec3(victim.getX(), victim.getY() + dropH, victim.getZ());
+        double targetY = targetY(phantom.level(), victim, c.siege);
+        Vec3 target = new Vec3(victim.getX(), targetY, victim.getZ());
         phantom.moveTargetPoint = target;
         steer(phantom, target);
 
@@ -163,7 +220,7 @@ public final class PayloadHandler {
         double horizSqr = dx * dx + dz * dz;
         double height = phantom.getY() - victim.getY();
         boolean overhead = horizSqr < DROP_RADIUS_SQR;
-        boolean high = height >= dropH - HEIGHT_TOLERANCE;
+        boolean high = phantom.getY() >= targetY - HEIGHT_TOLERANCE;
         boolean stalled = c.ticks > STALL_TICKS && horizSqr < STALL_RADIUS_SQR;
         if ((overhead && high) || stalled) {
             CursesMod.LOGGER.debug("Payload: phantom {} dropping creeper {} from {} blocks up (horizontal {}, tick {})",
@@ -208,6 +265,21 @@ public final class PayloadHandler {
             phantom.yBodyRot = yaw;
             phantom.yHeadRot = yaw;
         }
+    }
+
+    /**
+     * The height (world Y) to drop from. Normally up to DROP_HEIGHT above the player, less if there is a
+     * ceiling. For a sealed-in player: just above the highest block over them (the roof), so the creeper lands
+     * on the roof and blows it open instead of hanging inside it; if that is far above (the player is deep
+     * underground) the normal height is used.
+     */
+    private static double targetY(Level level, Player p, boolean siege) {
+        double normal = p.getY() + dropHeight(level, p);
+        if (!siege) {
+            return normal;
+        }
+        double roof = level.getHeight(Heightmap.Types.MOTION_BLOCKING, p.getBlockX(), p.getBlockZ()) + ROOF_CLEARANCE;
+        return roof - p.getY() <= ROOF_MAX_HEIGHT ? Math.max(roof, normal) : normal;
     }
 
     /** How high above the player to drop from: up to DROP_HEIGHT, less if there is a ceiling. */
