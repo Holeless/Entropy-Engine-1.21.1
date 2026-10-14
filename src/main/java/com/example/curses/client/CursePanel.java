@@ -3,6 +3,7 @@ package com.example.curses.client;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.example.curses.CursesMod;
 import com.example.curses.curse.Curse;
 import com.example.curses.curse.Curses;
 import com.example.curses.curse.PendingCurses;
@@ -13,6 +14,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
@@ -53,6 +55,7 @@ public final class CursePanel {
     private static Screen owner;
     private static Button button;
     private static ResourceLocation selected;
+    private static Screen loggedScreen;
 
     // Geometry of the box, refreshed every frame by layout()
     private static boolean shown;
@@ -80,36 +83,38 @@ public final class CursePanel {
         shown = false;
     }
 
-    /** Places the button and the box relative to the Allow Cheats button; hides both on other tabs. */
+    /** Places the button and the box under the Game tab's buttons; hides both on other tabs. */
     public static void layout(CreateWorldScreen screen) {
         shown = false;
         if (button == null || owner != screen) {
             return;
         }
-        CycleButton<?> cheats = findCheatsButton(screen);
-        if (cheats == null) {
+        List<AbstractWidget> column = findGameColumn(screen);
+        if (column.isEmpty()) {
             button.visible = false; // not the Game tab
+            logOnce(screen);
             return;
         }
 
-        int colX = cheats.getX();
-        int colW = cheats.getWidth();
-        int buttonY = cheats.getY() + cheats.getHeight() + ROW_GAP;
+        // The column is [world name box, game mode, difficulty, allow commands]: the Curses button goes
+        // under the lowest one, the box spans the whole column down to the Curses button.
+        AbstractWidget lowest = column.get(0);
+        int top = Integer.MAX_VALUE;
+        for (AbstractWidget widget : column) {
+            if (widget.getY() > lowest.getY()) {
+                lowest = widget;
+            }
+            top = Math.min(top, widget.getY());
+        }
+        int colX = lowest.getX();
+        int colW = lowest.getWidth();
+        int buttonY = lowest.getY() + lowest.getHeight() + ROW_GAP;
 
         button.setX(colX);
         button.setY(buttonY);
         button.setWidth(colW);
-        button.setHeight(cheats.getHeight());
+        button.setHeight(lowest.getHeight());
         button.visible = true;
-
-        // The box spans the whole column of buttons, from the top-most one down to the Curses button
-        int top = cheats.getY();
-        for (GuiEventListener child : screen.children()) {
-            if (child instanceof AbstractWidget widget && widget != button && widget.visible
-                    && Math.abs(widget.getX() - colX) <= 4 && widget.getY() < top) {
-                top = widget.getY();
-            }
-        }
 
         boxX = colX + colW + BOX_GAP;
         boxY = top;
@@ -235,16 +240,42 @@ public final class CursePanel {
     }
 
     /**
-     * The vanilla "Allow Cheats" button. It only exists while the Game tab is open, which is also how we
-     * know when to show our own widgets.
+     * The widgets of the Game tab's column of buttons (empty when another tab is open). The Game tab is
+     * recognised by its world-name box (the only text box whose content is the world's name), with the
+     * "Allow Commands" button as a fallback.
      */
-    private static CycleButton<?> findCheatsButton(Screen screen) {
-        for (GuiEventListener child : screen.children()) {
-            if (child instanceof CycleButton<?> cycle && isCheatsLabel(cycle.getMessage())) {
-                return cycle;
+    private static List<AbstractWidget> findGameColumn(CreateWorldScreen screen) {
+        AbstractWidget reference = null;
+
+        String worldName = screen.getUiState().getName();
+        if (!worldName.isEmpty()) {
+            for (GuiEventListener child : screen.children()) {
+                if (child instanceof EditBox box && worldName.equals(box.getValue())) {
+                    reference = box;
+                    break;
+                }
             }
         }
-        return null;
+        if (reference == null) {
+            for (GuiEventListener child : screen.children()) {
+                if (child instanceof CycleButton<?> cycle && isCheatsLabel(cycle.getMessage())) {
+                    reference = cycle;
+                    break;
+                }
+            }
+        }
+
+        List<AbstractWidget> column = new ArrayList<>();
+        if (reference == null) {
+            return column;
+        }
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof AbstractWidget widget && widget != button && widget.visible
+                    && Math.abs(widget.getX() - reference.getX()) <= 4) {
+                column.add(widget);
+            }
+        }
+        return column;
     }
 
     /** The button's text is "<name>: <value>", i.e. a translatable whose first argument is the option name. */
@@ -259,5 +290,23 @@ public final class CursePanel {
             }
         }
         return false;
+    }
+
+    /** Diagnostics: if the Game tab is never found, list what the screen contains (once per screen). */
+    private static void logOnce(CreateWorldScreen screen) {
+        if (loggedScreen == screen) {
+            return;
+        }
+        // Only log when no tab content at all is recognised on the very first frames; other tabs are normal
+        loggedScreen = screen;
+        StringBuilder sb = new StringBuilder("Create-world widgets (Game tab not recognised yet):");
+        for (GuiEventListener child : screen.children()) {
+            sb.append("\n  ").append(child.getClass().getSimpleName());
+            if (child instanceof AbstractWidget widget) {
+                sb.append(" '").append(widget.getMessage().getString()).append("' x=").append(widget.getX())
+                        .append(" y=").append(widget.getY()).append(" w=").append(widget.getWidth());
+            }
+        }
+        CursesMod.LOGGER.info(sb.toString());
     }
 }
