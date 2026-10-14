@@ -1,5 +1,8 @@
 {
   "item.curses.molotov": "Molotov Cocktail",
+  "item.curses.dynamite": "Dynamite",
+  "item.curses.explosive_arrow": "Explosive Arrow",
+  "entity.curses.explosive_arrow": "Explosive Arrow",
 
   "curses.screen.title": "Curses",
   "curses.create.button": "Curses (%s)",
@@ -58,5 +61,14 @@
   "curse.curses.incendiary.description": "Witches can throw Molotov Cocktails. Creepers cause fire when they explode",
 
   "curse.curses.fortified.name": "Fortified",
-  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down"
+  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down",
+
+  "curse.curses.ordnance.name": "Ordnance",
+  "curse.curses.ordnance.description": "Skeletons have a chance of shooting an exploding arrow. Witches may throw dynamite",
+
+  "curse.curses.warping.name": "Warping",
+  "curse.curses.warping.description": "Undead and Piglins have a chance to spawn with an Ender Pearl in their off hand, which they will use to get to you",
+
+  "curse.curses.inferno.name": "Inferno",
+  "curse.curses.inferno.description": "Blazes and Magma Cubes spawn in lava pools in the overworld"
 }

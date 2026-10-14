@@ -60,6 +60,15 @@ public final class Curses {
     /** Witches can throw Molotov Cocktails; creepers cause fire when they explode. */
     public static final Curse INCENDIARY = register("incendiary");
 
+    /** Skeletons sometimes shoot exploding arrows; witches may throw dynamite. */
+    public static final Curse ORDNANCE = register("ordnance");
+
+    /** Undead and piglins may spawn with an ender pearl in their off hand and use it to get to you. */
+    public static final Curse WARPING = register("warping");
+
+    /** Blazes and magma cubes spawn in lava pools in the overworld. */
+    public static final Curse INFERNO = register("inferno");
+
     private Curses() {
     }
 
