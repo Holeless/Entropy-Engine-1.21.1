@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.example.curses.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MobCategoryMixin",
+    "PiglinAiMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
