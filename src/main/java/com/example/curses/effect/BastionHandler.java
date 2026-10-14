@@ -32,6 +32,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingKnockBackEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
@@ -55,8 +56,9 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  *       2 to 5 seconds, lowers it for roughly a second so the player gets an opening, and repeats.</li>
  *   <li>If the target is drawing a bow, throwing a trident or holding a loaded crossbow, the mob guards from
  *       up to {@link #RANGED_GUARD_RANGE} blocks away.</li>
- *   <li>An axe hit on a mob whose shield is up and facing the attacker cuts through it: the shield drops
- *       and cannot be raised again for 5 seconds (that hit lands in full).</li>
+ *   <li>A mob with its shield up takes no knockback from hits in front of it.</li>
+ *   <li>An axe hit on a mob whose shield is up and facing the attacker disables it, as in vanilla: that hit is
+ *       still blocked, then the shield drops and cannot be raised again for 5 seconds.</li>
  * </ul>
  *
  * <p>Server only. Piglins keep the shield because {@code PiglinAiMixin} stops them throwing away their
@@ -232,9 +234,27 @@ public final class BastionHandler {
             return;
         }
 
+        // Like vanilla's axe vs. shield: this hit is still blocked, then the shield drops (the next guard
+        // check lowers it) and stays down for DISABLE_TICKS.
         DISABLED_UNTIL.put(mob, mob.level().getGameTime() + DISABLE_TICKS);
-        mob.stopUsingItem();
         mob.playSound(SoundEvents.SHIELD_BREAK, 0.8F, 0.8F + mob.level().random.nextFloat() * 0.4F);
+    }
+
+    /** A mob holding its shield up is not pushed around by hits from the front (hits from behind still push it). */
+    @SubscribeEvent
+    public static void onKnockBack(LivingKnockBackEvent event) {
+        if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) {
+            return;
+        }
+        if (!mob.isBlocking() || !mob.getOffhandItem().is(Items.SHIELD) || mob.getUsedItemHand() != InteractionHand.OFF_HAND) {
+            return;
+        }
+        // The ratios point from the mob toward whatever hit it, so it was hit from the front when they
+        // point the way the mob is facing. Hits from behind push it as usual.
+        Vec3 view = mob.calculateViewVector(0.0F, mob.getYHeadRot());
+        if (view.x * event.getRatioX() + view.z * event.getRatioZ() > 0.0) {
+            event.setCanceled(true);
+        }
     }
 
     /** Same frontal-arc test vanilla uses to decide whether a raised shield catches a hit. */

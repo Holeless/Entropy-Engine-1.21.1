@@ -44,5 +44,5 @@
   "curse.curses.infest.description": "Increase hostile mob spawn rate",
 
   "curse.curses.fortified.name": "Fortified",
-  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. Iron Golems hide from players holding a bow, or parry arrows when there is nothing to hide behind"
+  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. Iron Golems hide from players holding a bow who are out of reach above them, or parry arrows when there is nothing to hide behind"
 }
