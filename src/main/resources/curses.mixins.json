@@ -7,6 +7,9 @@
     "MobCategoryMixin",
     "PiglinAiMixin"
   ],
+  "client": [
+    "LivingEntityRendererMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

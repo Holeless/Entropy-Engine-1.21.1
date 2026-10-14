@@ -58,9 +58,9 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  * same rules a player's shield follows:</p>
  * <ul>
  *   <li>With a target within {@link #GUARD_RANGE} blocks and in sight, the mob reacts after a moment, raises
- *       the shield for 1 to 2 seconds, then lowers it for 2.5 to 4.5 seconds so the player gets a clear opening.</li>
+ *       the shield for 1.5 to 3 seconds, then lowers it for 1.5 to 3 seconds so the player still gets an opening.</li>
  *   <li>If the target is drawing a bow, throwing a trident or holding a loaded crossbow, the mob guards from
- *       up to {@link #RANGED_GUARD_RANGE} blocks away, but only notices it about 30% of the time.</li>
+ *       up to {@link #RANGED_GUARD_RANGE} blocks away, but only notices it about half the time.</li>
  *   <li>Hits from the front are blocked with the shield-block sound (not the mob's hurt sound), and a mob with
  *       its shield up takes no knockback at all, so it does not hop when hit.</li>
  *   <li>An axe hit on a mob whose shield is up and facing the attacker disables it, as in vanilla: that hit is
@@ -78,15 +78,15 @@ public final class BastionHandler {
     private static final String KEY_ROLLED = "curses_bastion_rolled";
 
     private static final int CHECK_INTERVAL = 2;           // ticks between guard decisions
-    private static final double GUARD_RANGE = 4.0;         // only guard when the target is about in melee range
+    private static final double GUARD_RANGE = 4.5;         // only guard when the target is about in melee range
     private static final double RANGED_GUARD_RANGE = 16.0; // ... or this close if the target is aiming something
-    private static final float RANGED_REACT_CHANCE = 0.3F; // a mob only sometimes notices an aimed bow
-    private static final int REACT_MIN = 10;               // ticks it takes the mob to react before the shield goes up
-    private static final int REACT_MAX = 25;
-    private static final int HOLD_MIN = 20;                // ticks the shield stays up
-    private static final int HOLD_MAX = 45;
-    private static final int REST_MIN = 50;                // ticks it stays down afterwards (the player's opening)
-    private static final int REST_MAX = 90;
+    private static final float RANGED_REACT_CHANCE = 0.5F; // a mob only sometimes notices an aimed bow
+    private static final int REACT_MIN = 6;                // ticks it takes the mob to react before the shield goes up
+    private static final int REACT_MAX = 15;
+    private static final int HOLD_MIN = 30;                // ticks the shield stays up
+    private static final int HOLD_MAX = 60;
+    private static final int REST_MIN = 30;                // ticks it stays down afterwards (the player's opening)
+    private static final int REST_MAX = 60;
     private static final int DISABLE_TICKS = 100;          // an axe hit disables the shield for this long
 
     // Server thread only.
