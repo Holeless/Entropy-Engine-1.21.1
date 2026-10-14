@@ -35,5 +35,14 @@
   "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players",
 
   "curse.curses.insomnia.name": "Insomnia",
-  "curse.curses.insomnia.description": "Players cannot sleep"
+  "curse.curses.insomnia.description": "Players cannot sleep",
+
+  "curse.curses.bastion.name": "Bastion",
+  "curse.curses.bastion.description": "Undead, Piglins, and Illagers have a chance to spawn with a shield in their off hand and use it accordingly",
+
+  "curse.curses.myriad.name": "Myriad",
+  "curse.curses.myriad.description": "Increase hostile mob spawn rate",
+
+  "curse.curses.fortified.name": "Fortified",
+  "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. Iron Golems move away from pillars and take cover from ranged attacks if you are not reachable"
 }
