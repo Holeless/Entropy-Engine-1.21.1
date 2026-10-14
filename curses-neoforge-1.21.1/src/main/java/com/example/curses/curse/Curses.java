@@ -1,0 +1,51 @@
+package com.example.curses.curse;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import com.example.curses.CursesMod;
+
+import net.minecraft.resources.ResourceLocation;
+
+/**
+ * All curses known to the mod, in the order they are shown in the selection screen.
+ *
+ * <p>To add a curse: register it here, add its lang keys and a 16x16 symbol texture,
+ * then implement its effect (see {@code FamineHandler} for an example).</p>
+ */
+public final class Curses {
+    private static final Map<ResourceLocation, Curse> REGISTRY = new LinkedHashMap<>();
+
+    /** Hunger depletes 50% faster. */
+    public static final Curse FAMINE = register("famine");
+
+    private Curses() {
+    }
+
+    private static Curse register(String path) {
+        Curse curse = new Curse(CursesMod.id(path));
+        REGISTRY.put(curse.id(), curse);
+        return curse;
+    }
+
+    public static Collection<Curse> all() {
+        return Collections.unmodifiableCollection(REGISTRY.values());
+    }
+
+    /** Returns the curse with this id, or null if there is none. */
+    public static Curse get(ResourceLocation id) {
+        return REGISTRY.get(id);
+    }
+
+    /** Looks a curse up by the path of its id (e.g. "famine"), ignoring case. Returns null if there is none. */
+    public static Curse byName(String name) {
+        for (Curse curse : REGISTRY.values()) {
+            if (curse.id().getPath().equalsIgnoreCase(name)) {
+                return curse;
+            }
+        }
+        return null;
+    }
+}

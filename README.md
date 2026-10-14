@@ -47,7 +47,7 @@ Requires JDK 21.
 ```
 
 The mod jar ends up in `build/libs/`. On GitHub, every push runs the **Build** workflow
-(`.github/workflows/build.yml`) and uploads the jar as the `curses-mod` artifact.
+(`.github/workflows/build.yml`) and uploads the jar as an unzipped artifact.
 
 To test in a dev client: `./gradlew runClient`.
 
