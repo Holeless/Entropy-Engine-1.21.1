@@ -33,6 +33,9 @@ public final class Curses {
     /** Spiders leave webs in their wake and try to catch players with them. */
     public static final Curse ENTANGLE = register("entangle");
 
+    /** Phantoms pick up creepers and drop them on players. */
+    public static final Curse PAYLOAD = register("payload");
+
     private Curses() {
     }
 

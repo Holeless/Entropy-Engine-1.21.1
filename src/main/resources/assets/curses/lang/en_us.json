@@ -29,5 +29,8 @@
   "curse.curses.hypocrisy.description": "Undead, Piglins and Illagers have a chance to spawn with a Totem of Undying",
 
   "curse.curses.entangle.name": "Entangle",
-  "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them"
+  "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them",
+
+  "curse.curses.payload.name": "Payload",
+  "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players"
 }
