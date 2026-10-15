@@ -1,4 +1,3 @@
-```java
 package com.example.curses.effect;
 
 import net.minecraft.server.level.ServerLevel;
@@ -146,4 +145,3 @@ public final class Siege {
         return best;
     }
 }
-```
