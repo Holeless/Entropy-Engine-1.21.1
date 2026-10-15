@@ -54,9 +54,16 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
  *
  * <p><b>The explosions are real</b> (vanilla creeper blast, dynamite power 2: damage, knockback, crater, drops). Hostile
  * mobs are taken out of the blast's damage list, so witches cannot blow themselves up and the queue behind the
- * head is safe. One tick after the blast the next steps are opened and lined ({@link TunnelBlocks}) so the route is
- * clear whatever the crater looks like. A breach is only started when its face is at least 7 blocks from the player;
- * closer than that creepers behave like vanilla and a witch stays put, while endermen can still dig.</p>
+ * head is safe. A breach is only started when its face is at least 7 blocks from the player; closer than that
+ * creepers behave like vanilla and a witch stays put, while endermen can still dig.</p>
+ *
+ * <p><b>The follow-up is a rolling chain of small real explosions.</b> After the main blast the next
+ * {@link #BLAST_CELLS} cells are opened one at a time, {@link #CHAIN_GAP} ticks apart, and each one gets its own small
+ * explosion (particles, sound, knockback; {@code ExplosionInteraction.NONE}, so no extra crater or drops). The
+ * tunnel therefore visibly blows its way forward instead of growing by itself, while the dig still guarantees the
+ * route is open and lined ({@link TunnelBlocks}) whatever the crater looks like. The cost is at most
+ * {@link #BLAST_CELLS} small explosions per breach, one breach per tunnel at a time, plus the lag guard in
+ * {@link TunnelManager}, which stops the chain whenever the server is slow.</p>
  *
  * <p>Server only.</p>
  */
@@ -66,6 +73,8 @@ public final class BreachHandler {
     private static final int ENDER_INTERVAL = 14;
     private static final int BLAST_CELLS = 3;
     private static final int BLAST_COOLDOWN = 40;
+    private static final int CHAIN_GAP = 3;              // ticks between the chained small blasts
+    private static final float CHAIN_POWER = 1.3F;       // small: smoke, sound and a shove, no crater
     private static final int PRIME_HOLD = 100;           // a primed creeper that never blew up frees the slot after this
     private static final double SAFE_PLAYER_DIST_SQR = 7.0 * 7.0; // the blasts are real now: keep them off the player
     private static final float DYNAMITE_POWER = 2.0F;
@@ -90,11 +99,11 @@ public final class BreachHandler {
     private static final Map<Witch, Long> WITCH_READY = new WeakHashMap<>();
     private static final Map<ThrownPotion, TunnelPlan> BREACH_POTIONS = new WeakHashMap<>();
     private static TunnelPlan throwing;
-    /** True while a witch's tunnel dynamite is exploding, so Detonate can tell it from a normal blast. */
+    /** True while one of the tunnel's own explosions is going off, so Detonate can tell it from a normal blast. */
     private static boolean dynamiteBlast;
 
-    /** Cells to open one tick after a real explosion, so the blast cannot undo the lining. */
-    private record Pending(ServerLevel level, TunnelPlan plan, Vec3 at, long due) {
+    /** One step of the chain: open the next cell (with a small blast) at {@code due}, then {@code steps - 1} more. */
+    private record Pending(ServerLevel level, TunnelPlan plan, Vec3 at, long due, int steps) {
     }
 
     private static final List<Pending> PENDING = new ArrayList<>();
@@ -247,7 +256,8 @@ public final class BreachHandler {
 
     /**
      * A primed creeper explodes for real (vanilla blast, damage, crater). One tick later the tunnel's next steps are
-     * opened and lined, so the route is guaranteed to be clear whatever the blast did.
+     * opened and lined, one at a time with a small blast each, so the route is guaranteed to be clear whatever the
+     * blast did and the tunnel is seen blowing its way forward.
      */
     @SubscribeEvent
     public static void onExplosionStart(ExplosionEvent.Start event) {
@@ -276,7 +286,7 @@ public final class BreachHandler {
     }
 
     private static void queue(ServerLevel level, TunnelPlan plan, Vec3 at) {
-        PENDING.add(new Pending(level, plan, at, level.getGameTime() + 1));
+        PENDING.add(new Pending(level, plan, at, level.getGameTime() + 1, BLAST_CELLS));
     }
 
     @SubscribeEvent
@@ -285,13 +295,23 @@ public final class BreachHandler {
             return;
         }
         long now = level.getGameTime();
+        List<Pending> follow = null;
         for (Iterator<Pending> it = PENDING.iterator(); it.hasNext();) {
             Pending p = it.next();
             if (p.level() != level || now < p.due()) {
                 continue;
             }
             it.remove();
-            openAfterBlast(level, p.plan(), p.at());
+            Pending next = openAfterBlast(level, p.plan(), p.at(), p.steps());
+            if (next != null) {
+                if (follow == null) {
+                    follow = new ArrayList<>(2);
+                }
+                follow.add(next);
+            }
+        }
+        if (follow != null) {
+            PENDING.addAll(follow); // added after the loop: the list cannot change while it is iterated
         }
     }
 
@@ -378,20 +398,44 @@ public final class BreachHandler {
     // The breach itself
     // ---------------------------------------------------------------------------------------------------
 
-    /** Opens (and lines) the next stretch of the tunnel after a real explosion has gone off. */
-    private static void openAfterBlast(ServerLevel level, TunnelPlan plan, Vec3 at) {
-        if (plan.dead || !plan.frontierPending()) {
-            return;
+    /**
+     * One step of the chain after a real explosion has gone off: opens (and lines) the next cell of the tunnel and
+     * sets off a small blast there. Returns the following step ({@link #CHAIN_GAP} ticks later) or null when the
+     * chain is over (all steps done, the tunnel is blocked, the lag guard paused it, or the player moved away).
+     */
+    private static Pending openAfterBlast(ServerLevel level, TunnelPlan plan, Vec3 at, int steps) {
+        if (plan.dead || !TunnelManager.working() || !plan.frontierPending()) {
+            return null;
         }
         Player prey = level.getServer().getPlayerList().getPlayer(plan.playerId);
         BlockPos last = plan.lastOpen();
         if (prey == null || at.distanceToSqr(last.getX() + 0.5, last.getY(), last.getZ() + 0.5) > 8.0 * 8.0) {
-            return;
+            return null;
         }
-        if (TunnelManager.digNext(plan, prey, BLAST_CELLS)) {
-            long now = level.getGameTime();
-            plan.nextBlast = now + BLAST_COOLDOWN;
-            plan.lastActive = now;
+
+        BlockPos cell = plan.cells.get(plan.head); // the cell digNext opens first
+        boolean safe = cell.distSqr(prey.blockPosition()) >= SAFE_PLAYER_DIST_SQR; // keep the blasts off the player
+        if (!TunnelManager.digNext(plan, prey, 1)) {
+            return null;
+        }
+        long now = level.getGameTime();
+        plan.nextBlast = now + BLAST_COOLDOWN;
+        plan.lastActive = now;
+
+        Vec3 center = new Vec3(cell.getX() + 0.5, cell.getY() + 1.0, cell.getZ() + 0.5);
+        if (safe) {
+            chainBlast(level, center);
+        }
+        return steps > 1 ? new Pending(level, plan, center, now + CHAIN_GAP, steps - 1) : null;
+    }
+
+    /** A small real explosion: particles, sound and knockback, but no crater and no drops. */
+    private static void chainBlast(ServerLevel level, Vec3 at) {
+        dynamiteBlast = true; // hostile mobs are exempt, same as for the dynamite
+        try {
+            level.explode(null, at.x, at.y, at.z, CHAIN_POWER, Level.ExplosionInteraction.NONE);
+        } finally {
+            dynamiteBlast = false;
         }
     }
 }

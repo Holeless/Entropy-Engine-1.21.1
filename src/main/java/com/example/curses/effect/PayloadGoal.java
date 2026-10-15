@@ -29,7 +29,8 @@ import net.minecraft.world.phys.Vec3;
  * see. It then works on that player anyway, and it does not give up:
  * <ol>
  *   <li><b>Search.</b> It always goes for a creeper (no random chance) and looks far: around the player and
- *       around itself, {@link #SEEK_H} blocks sideways. The nearest creeper in the open is taken.</li>
+ *       around itself, {@link #SEEK_H} blocks sideways and {@link #SEEK_V} blocks up and down (so creepers on the
+ *       ground far below a sky base are found). The nearest creeper in the open is taken.</li>
  *   <li><b>Seek.</b> If there is none, it does not go back to circling. It flies out over the area in a wide loop
  *       around the player (a new waypoint every few seconds), searching again every second, until it spots a
  *       creeper, for up to a minute before it takes a breather and starts again.</li>
@@ -45,7 +46,7 @@ public class PayloadGoal extends Goal {
     private static final double CREEPER_RANGE_H = 24.0; // creepers this far (sideways) from the player qualify
     private static final double CREEPER_RANGE_V = 16.0; // ... and this far up/down
     private static final double SEEK_H = 72.0;          // siege: search this far sideways (around player and phantom)
-    private static final double SEEK_V = 56.0;
+    private static final double SEEK_V = 200.0;         // siege: ... and this far up/down (sky bases: creepers wait far below)
     private static final double MIN_PLAYER_GAP_SQR = 7.0 * 7.0; // skip creepers about to blow up on the player anyway
     private static final double SIEGE_MIN_GAP_SQR = 3.0 * 3.0;
     private static final float CHANCE = 0.5F;           // per search

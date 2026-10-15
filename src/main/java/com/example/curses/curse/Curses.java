@@ -87,6 +87,12 @@ public final class Curses {
     /** Pigs are Hoglins; cows and mooshrooms are Ravagers. */
     public static final Curse SELECTIVE_BREEDING = register("selective_breeding");
 
+    /** Hostile mobs look for horses, donkeys and spiders to ride, which carry them to you. */
+    public static final Curse BEAST_OF_BURDEN = register("beast_of_burden");
+
+    /** Endermen move placed blocks and build pathways; undead and piglins (not skeletons) break blocks by hand. */
+    public static final Curse BREACH = register("breach");
+
     private Curses() {
     }
 

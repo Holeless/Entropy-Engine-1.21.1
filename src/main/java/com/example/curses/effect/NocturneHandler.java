@@ -17,6 +17,7 @@ import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.NaturalSpawner;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -26,8 +27,13 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
  * Nocturne: phantoms spawn every night no matter how recently you slept, and also in caves, like bats.
  *
  * <p>This is a spawner of its own, separate from vanilla's (which still runs). Every 30-60 seconds at night,
- * each player gets a pair of phantoms: high above them if they are under open sky, or out in the dark cave
+ * each player gets a pair of phantoms: high above them if they are on the surface, or out in the dark cave
  * air around them if they are underground. Server only.</p>
+ *
+ * <p><b>Surface</b> means open sky, or above sea level with a roof close overhead (a house, a sky base). In that
+ * case the phantoms appear above the roof, not above the player's head, so a player in a roofed sky base still
+ * gets them (and the Payload siege logic takes over). A cave under more than {@link #ROOF_NEAR} blocks of rock
+ * still counts as underground.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class NocturneHandler {
@@ -36,6 +42,8 @@ public final class NocturneHandler {
     private static final int MAX_NEARBY = 8;         // phantom cap around a player
     private static final int ATTEMPTS = 16;
     private static final int GROUP_SIZE = 2;         // phantoms per spawn
+    private static final int ROOF_NEAR = 24;         // a roof this close overhead still counts as "surface"
+    private static final int BUILD_MARGIN = 20;      // keep spawns this far below the build limit
 
     private static int cooldown = 0;
 
@@ -89,11 +97,18 @@ public final class NocturneHandler {
 
         RandomSource random = level.random;
         BlockPos origin = player.blockPosition();
-        boolean surface = origin.getY() >= level.getSeaLevel() && level.canSeeSky(origin);
+        int roof = level.getHeight(Heightmap.Types.MOTION_BLOCKING, origin.getX(), origin.getZ());
+        // Surface = open sky, OR above sea level with a roof close overhead (a house or a sky base).
+        // A cave under more than ROOF_NEAR blocks of rock still counts as underground.
+        boolean surface = origin.getY() >= level.getSeaLevel()
+                && (level.canSeeSky(origin) || roof - origin.getY() <= ROOF_NEAR);
+        // Phantoms appear above the roof, so a roofed player at any height still gets them.
+        BlockPos above = origin.atY(Math.max(origin.getY(), roof));
+        int maxY = level.getMaxBuildHeight() - BUILD_MARGIN;
 
         BlockPos spot = null;
         for (int i = 0; i < ATTEMPTS && spot == null; i++) {
-            BlockPos pos = surface ? surfaceCandidate(origin, random) : caveCandidate(origin, random);
+            BlockPos pos = surface ? surfaceCandidate(above, random, maxY) : caveCandidate(origin, random);
             if (pos != null && isFree(level, pos) && (surface || isDarkCave(level, pos))) {
                 spot = pos;
             }
@@ -114,11 +129,12 @@ public final class NocturneHandler {
         }
     }
 
-    /** Same spot vanilla picks: 20-34 blocks up, scattered sideways. */
-    private static BlockPos surfaceCandidate(BlockPos origin, RandomSource random) {
-        return origin.above(20 + random.nextInt(15))
+    /** Same spot vanilla picks: 20-34 blocks up, scattered sideways (never above maxY). */
+    private static BlockPos surfaceCandidate(BlockPos origin, RandomSource random, int maxY) {
+        BlockPos pos = origin.above(20 + random.nextInt(15))
                 .east(-10 + random.nextInt(21))
                 .south(-10 + random.nextInt(21));
+        return pos.getY() > maxY ? pos.atY(maxY) : pos;
     }
 
     /** Somewhere in the cave around the player, never right on top of them. */

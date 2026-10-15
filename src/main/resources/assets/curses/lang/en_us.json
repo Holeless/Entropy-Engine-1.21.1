@@ -49,7 +49,7 @@
   "curse.curses.infest.description": "Increase hostile mob spawn rate",
 
   "curse.curses.nocturne.name": "Nocturne",
-  "curse.curses.nocturne.description": "Phantoms spawn every night regardless of sleep, and in caves too",
+  "curse.curses.nocturne.description": "Phantoms spawn every night regardless of sleep, in caves, and above your roof if you build high",
 
   "curse.curses.unity.name": "Unity",
   "curse.curses.unity.description": "Hostile mobs never get aggravated at each other",
@@ -79,7 +79,7 @@
   "curse.curses.sagacious.description": "Hostile mobs have 2.25x detection range",
 
   "curse.curses.omniscience.name": "Omniscience",
-  "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance. Endermen, creepers and witches dig one shared tunnel through rock and walls to reach you, and every other mob follows it",
+  "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance. Endermen, creepers and witches dig one shared tunnel through rock and walls to reach you, blasting it open as they go, and every other mob follows it",
 
   "curse.curses.inconspicuous.name": "Inconspicuous",
   "curse.curses.inconspicuous.description": "Creepers have a chance to spawn 80% transparent. These creepers make no sound when they ignite",
@@ -88,5 +88,11 @@
   "curse.curses.kiting.description": "Ranged mobs back away from you while attacking, and hide behind structures and other mobs between shots",
 
   "curse.curses.selective_breeding.name": "Selective Breeding",
-  "curse.curses.selective_breeding.description": "Pigs are Hoglins. Cows and Mooshrooms are Ravagers"
+  "curse.curses.selective_breeding.description": "Pigs are Hoglins. Cows and Mooshrooms are Ravagers",
+
+  "curse.curses.beast_of_burden.name": "Beast of Burden",
+  "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you",
+
+  "curse.curses.breach.name": "Breach",
+  "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you"
 }
