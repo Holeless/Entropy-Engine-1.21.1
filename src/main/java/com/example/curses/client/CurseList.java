@@ -18,7 +18,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * Vanilla-style scrolling list with one row per curse: symbol, name, description and a checkbox.
+ * Vanilla-style scrolling list with one row per curse: symbol (a vanilla item), name, description and a checkbox.
  * Click a row (or press Enter/Space on it) to toggle its curse.
  *
  * <p>Rows are tall enough for the longest description at the current screen width, so every description is
@@ -94,7 +94,7 @@ public class CurseList extends ObjectSelectionList<CurseList.Row> {
 
             // Symbol on a dark tile, outlined red when the curse is on
             graphics.fill(left + 3, top + 1, left + 3 + ICON_SIZE + 2, top + 1 + ICON_SIZE + 2, 0xFF000000);
-            graphics.blit(curse.icon(), left + 4, top + 2, ICON_SIZE, ICON_SIZE, 0.0F, 0.0F, 16, 16, 16, 16);
+            ItemIcon.draw(graphics, curse.icon(), left + 4, top + 2, ICON_SIZE);
             graphics.renderOutline(left + 3, top + 1, ICON_SIZE + 2, ICON_SIZE + 2, enabled ? 0xFFFF5555 : 0xFF555555);
 
             int textX = left + TEXT_OFFSET;

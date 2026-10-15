@@ -1,20 +1,14 @@
 {
   "item.curses.molotov": "Molotov Cocktail",
   "item.curses.dynamite": "Dynamite",
-  "item.curses.explosive_arrow": "Explosive Arrow",
   "item.curses.splash_potion_of_milk": "Splash Potion of Milk",
   "item.curses.potion_of_levitation": "Potion of Levitation",
-  "entity.curses.explosive_arrow": "Explosive Arrow",
-
   "curses.screen.title": "Curses",
   "curses.create.button": "Curses (%s)",
   "curses.create.tooltip": "Choose curses that affect the whole world.",
-
   "curses.panel.empty": "No curses chosen",
   "curses.panel.hint": "Click a curse to see what it does",
-
   "curses.message.active": "This world is cursed: %s",
-
   "curses.command.none": "No curses are active in this world.",
   "curses.command.list": "Active curses: %s",
   "curses.command.added": "Cursed the world with %s.",
@@ -22,85 +16,56 @@
   "curses.command.already_active": "%s is already active.",
   "curses.command.not_active": "%s is not active.",
   "curses.command.unknown": "Unknown curse: %s",
-
   "curse.curses.famine.name": "Famine",
   "curse.curses.famine.description": "Hunger depletes faster",
-
   "curse.curses.quick_fuse.name": "Quick Fuse",
   "curse.curses.quick_fuse.description": "Creepers explode faster",
-
   "curse.curses.deluge.name": "Deluge",
   "curse.curses.deluge.description": "Increased chance of rain and thunderstorms",
-
   "curse.curses.hypocrisy.name": "Hypocrisy",
   "curse.curses.hypocrisy.description": "Undead, Piglins and Illagers have a chance to spawn with a Totem of Undying",
-
   "curse.curses.entangle.name": "Entangle",
   "curse.curses.entangle.description": "Spiders leave webs in their wake and attempt to catch players with them",
-
   "curse.curses.payload.name": "Payload",
   "curse.curses.payload.description": "Phantoms pick up creepers and drop them on players. If you wall yourself in, they blast through your roof",
-
   "curse.curses.insomnia.name": "Insomnia",
   "curse.curses.insomnia.description": "Players cannot sleep",
-
   "curse.curses.bastion.name": "Bastion",
   "curse.curses.bastion.description": "Zombies, Skeletons and Piglins have a chance to spawn with a shield in their off hand and use it like a player would",
-
   "curse.curses.infest.name": "Infest",
   "curse.curses.infest.description": "Increase hostile mob spawn rate",
-
   "curse.curses.nocturne.name": "Nocturne",
   "curse.curses.nocturne.description": "Phantoms spawn every night regardless of sleep, in caves, and above your roof if you build high",
-
   "curse.curses.unity.name": "Unity",
   "curse.curses.unity.description": "Hostile mobs never get aggravated at each other",
-
   "curse.curses.coven.name": "Coven",
   "curse.curses.coven.description": "Witches spawn much more often, at night and in caves. They drink Levitation to reach you on a tower, throw Milk to strip your buffs, and put out burning allies with Water and heal them with Regeneration",
-
   "curse.curses.incendiary.name": "Incendiary",
   "curse.curses.incendiary.description": "Villagers you anger, by hurting them or attacking an Iron Golem, throw Molotov Cocktails at you. Creepers cause fire when they explode",
-
   "curse.curses.fortified.name": "Fortified",
   "curse.curses.fortified.description": "Villages spawn with 3 Iron Golems. A golem you have angered runs away and hides if you get out of its reach (a tower, a ledge), and charges again when you come down",
-
-  "curse.curses.ordnance.name": "Ordnance",
-  "curse.curses.ordnance.description": "Skeletons may carry exploding arrows and witches may throw dynamite. If you wall yourself in, they use them to blast their way to you",
-
   "curse.curses.warping.name": "Warping",
   "curse.curses.warping.description": "Undead and Piglins have a chance to spawn with an Ender Pearl in their off hand, which they will use to get to you",
-
   "curse.curses.inferno.name": "Inferno",
   "curse.curses.inferno.description": "Blazes and Magma Cubes spawn in lava pools in the overworld",
-
   "curse.curses.brittle.name": "Brittle",
   "curse.curses.brittle.description": "Armor and tools lose durability faster",
-
   "curse.curses.sagacious.name": "Sagacious",
   "curse.curses.sagacious.description": "Hostile mobs have 2.25x detection range",
-
   "curse.curses.omniscience.name": "Omniscience",
   "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance. Endermen, creepers and witches dig one shared tunnel through rock and walls to reach you, blasting it open as they go, and every other mob follows it",
-
   "curse.curses.inconspicuous.name": "Inconspicuous",
   "curse.curses.inconspicuous.description": "Creepers have a chance to spawn 80% transparent. These creepers make no sound when they ignite",
-
   "curse.curses.kiting.name": "Kiting",
   "curse.curses.kiting.description": "Ranged mobs back away from you while attacking, and hide behind structures and other mobs between shots",
-
   "curse.curses.selective_breeding.name": "Selective Breeding",
   "curse.curses.selective_breeding.description": "Pigs are Hoglins. Cows and Mooshrooms are Ravagers",
-
   "curse.curses.beast_of_burden.name": "Beast of Burden",
   "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you. Skeletons and Zombies have a 1% chance to spawn on a Skeleton Horse or Zombie Horse. A horse, donkey or mule always runs and obeys its rider; a spider stays in control of itself, climbing to reach you, and when it carries a ranged mob it holds its distance and backs away once you are in firing range",
-
   "curse.curses.breach.name": "Breach",
   "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you",
-
   "curse.curses.tools.name": "Tools",
   "curse.curses.tools.description": "Zombies have a chance to spawn with a pickaxe or an axe, and use it to dig through blocks to get to you",
-
   "curse.curses.sunproof.name": "Sunproof",
   "curse.curses.sunproof.description": "Mobs do not catch fire in sunlight"
 }

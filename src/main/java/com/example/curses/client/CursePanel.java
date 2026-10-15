@@ -31,8 +31,8 @@ import net.minecraft.util.FormattedCharSequence;
  *
  * <ul>
  *   <li>the "Curses" button, placed directly under "Allow Cheats" with the same width and height</li>
- *   <li>a vanilla-style box to the right of the button column that shows an icon for every chosen curse;
- *       clicking an icon shows that curse's name and description at the bottom of the box</li>
+ *   <li>a vanilla-style box to the right of the button column that shows an icon (a vanilla item) for every chosen
+ *       curse; clicking an icon shows that curse's name and description at the bottom of the box</li>
  * </ul>
  *
  * <p>Everything is positioned relative to the vanilla "Allow Cheats" button, so it follows vanilla's layout
@@ -197,8 +197,7 @@ public final class CursePanel {
             }
             int outline = isSelected ? 0xFFFFFFFF : hovered ? 0xFFA0A0A0 : 0xFF555555;
             graphics.fill(pos[0], pos[1], pos[0] + slot, pos[1] + slot, 0xFF000000);
-            graphics.blit(curse.icon(), pos[0] + (slot - icon) / 2, pos[1] + (slot - icon) / 2, icon, icon,
-                    0.0F, 0.0F, 16, 16, 16, 16);
+            ItemIcon.draw(graphics, curse.icon(), pos[0] + (slot - icon) / 2, pos[1] + (slot - icon) / 2, icon);
             graphics.renderOutline(pos[0], pos[1], slot, slot, outline);
         }
 

@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 
 import com.example.curses.client.CursesClientSetup;
 import com.example.curses.curse.Curses;
-import com.example.curses.registry.CursesEntities;
 import com.example.curses.registry.CursesItems;
 import com.mojang.logging.LogUtils;
 
@@ -18,8 +17,7 @@ import net.neoforged.fml.loading.FMLEnvironment;
  * Entry point of the Curses mod.
  *
  * <p>All behaviour lives in event-subscriber classes that register themselves via
- * {@code @EventBusSubscriber}, so this class only holds shared constants and registers the mod's items and
- * entities.</p>
+ * {@code @EventBusSubscriber}, so this class only holds shared constants and registers the mod's items.</p>
  */
 @Mod(CursesMod.MOD_ID)
 public class CursesMod {
@@ -29,7 +27,6 @@ public class CursesMod {
 
     public CursesMod(IEventBus modEventBus) {
         CursesItems.ITEMS.register(modEventBus);
-        CursesEntities.ENTITY_TYPES.register(modEventBus);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(CursesClientSetup::onRegisterRenderers);
         }

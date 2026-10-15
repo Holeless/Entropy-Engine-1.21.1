@@ -1,7 +1,5 @@
 package com.example.curses.client;
 
-import com.example.curses.registry.CursesEntities;
-
 import net.minecraft.world.entity.EntityType;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 
@@ -11,7 +9,6 @@ public final class CursesClientSetup {
     }
 
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
-        event.registerEntityRenderer(CursesEntities.EXPLOSIVE_ARROW.get(), ExplosiveArrowRenderer::new);
         // Replaces the vanilla creeper renderer so that Inconspicuous creepers can be drawn see-through.
         event.registerEntityRenderer(EntityType.CREEPER, InconspicuousCreeperRenderer::new);
     }
