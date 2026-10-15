@@ -3,7 +3,6 @@ package com.example.curses.effect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
@@ -17,10 +16,11 @@ import net.minecraft.world.entity.player.Player;
  * running underneath it (drawing the bow, aiming, shooting); this goal only decides where the feet go, and
  * since it was added after the attack goal it ticks after it and wins the strafe each tick.</p>
  *
- * <p><b>Speed:</b> strafing drives the mob with full forward input, so the speed modifier works out as the
- * movement the mob gets per tick: a modifier equal to the mob's own movement speed attribute is exactly its
- * normal walking pace. That is what is used ({@link #SPEED} of it), so a mob backs away as fast as it walks and no
- * faster. (An earlier version set a modifier of 0.7, which is nearly three times walking speed.)</p>
+ * <p><b>Speed:</b> in {@code MoveControl} the strafe speed is {@code speedModifier x movement speed attribute}, the
+ * same as ordinary walking, where a modifier of 1.0 is the mob's normal walking pace. Vanilla's strafe sets a modifier
+ * of 0.25, and an earlier version of this goal set the modifier to the attribute itself (also about 0.25), so the
+ * attribute was multiplied in twice and mobs backed away at about a quarter of their walking pace, a crawl. The
+ * modifier is now simply {@link #SPEED}, a share of the normal walking pace.</p>
  *
  * <p>If the way back is blocked (wall, drop, fire, water) it sidesteps instead; if that is blocked too it just
  * stands and shoots. It steps aside for {@link HideGoal} while that is running. Does nothing while the curse is
@@ -28,7 +28,7 @@ import net.minecraft.world.entity.player.Player;
  */
 public class KiteGoal extends Goal {
     /** Share of the mob's normal walking pace it backs away at (1.0 = exactly as fast as it walks). */
-    private static final double SPEED = 1.0;
+    private static final double SPEED = 0.7;
     /** Once backing away, keep going until this much past the start distance, so it does not jitter. */
     private static final double HYSTERESIS = 1.5;
     /** Spots this far behind the mob must be safe to stand on. */
@@ -123,9 +123,9 @@ public class KiteGoal extends Goal {
     private void move(float forward, float strafe) {
         MoveControl control = mob.getMoveControl();
         control.strafe(forward, strafe);
-        // strafe() sets a modifier of 0.25, which is only right for mobs whose speed attribute is 0.25. Using the
-        // mob's own speed makes the retreat match its walking pace whatever mob it is (access transformer: public).
-        control.speedModifier = mob.getAttributeValue(Attributes.MOVEMENT_SPEED) * SPEED;
+        // strafe() sets a modifier of 0.25 (a crawl). The control multiplies the modifier by the mob's own speed
+        // attribute, so the modifier is a plain share of walking pace (access transformer: speedModifier is public).
+        control.speedModifier = SPEED;
     }
 
     /** Is it safe to walk a couple of blocks in this horizontal direction? */

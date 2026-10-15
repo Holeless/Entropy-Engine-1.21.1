@@ -54,7 +54,7 @@ public final class Curses {
     /** Hostile mobs never get aggravated at each other. */
     public static final Curse UNITY = register("unity");
 
-    /** Witches buff other mobs with splash potions, throw from further away and can throw lingering potions. */
+    /** Witches spawn far more often, at night and in caves. */
     public static final Curse COVEN = register("coven");
 
     /** Witches can throw Molotov Cocktails; creepers cause fire when they explode. */
@@ -95,6 +95,9 @@ public final class Curses {
 
     /** Zombies may spawn with a pickaxe or an axe and use it to dig to you. */
     public static final Curse TOOLS = register("tools");
+
+    /** Mobs do not catch fire in sunlight. */
+    public static final Curse SUNPROOF = register("sunproof");
 
     private Curses() {
     }

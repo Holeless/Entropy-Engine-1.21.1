@@ -55,7 +55,7 @@
   "curse.curses.unity.description": "Hostile mobs never get aggravated at each other",
 
   "curse.curses.coven.name": "Coven",
-  "curse.curses.coven.description": "Witches buff other mobs with splash potions, throw from further away and can throw lingering potions",
+  "curse.curses.coven.description": "Witches spawn much more often, at night and in caves",
 
   "curse.curses.incendiary.name": "Incendiary",
   "curse.curses.incendiary.description": "Witches can throw Molotov Cocktails, and use them to burn down any shelter you hide in. Creepers cause fire when they explode",
@@ -91,11 +91,14 @@
   "curse.curses.selective_breeding.description": "Pigs are Hoglins. Cows and Mooshrooms are Ravagers",
 
   "curse.curses.beast_of_burden.name": "Beast of Burden",
-  "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you",
+  "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you. A horse, donkey or mule always runs and obeys its rider; a spider stays in control of itself",
 
   "curse.curses.breach.name": "Breach",
   "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you",
 
   "curse.curses.tools.name": "Tools",
-  "curse.curses.tools.description": "Zombies have a chance to spawn with a pickaxe or an axe, and use it to dig through blocks to get to you"
+  "curse.curses.tools.description": "Zombies have a chance to spawn with a pickaxe or an axe, and use it to dig through blocks to get to you",
+
+  "curse.curses.sunproof.name": "Sunproof",
+  "curse.curses.sunproof.description": "Mobs do not catch fire in sunlight"
 }
