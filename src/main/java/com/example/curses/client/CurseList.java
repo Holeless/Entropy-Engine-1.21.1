@@ -92,6 +92,14 @@ public class CurseList extends ObjectSelectionList<CurseList.Row> {
             Font font = Minecraft.getInstance().font;
             boolean enabled = PendingCurses.isSelected(curse);
 
+            // Row background: red tint when the curse is on, light tint under the mouse
+            if (enabled) {
+                graphics.fill(left, top - 2, left + width, top + height + 2, 0x30FF5555);
+            }
+            if (hovering) {
+                graphics.fill(left, top - 2, left + width, top + height + 2, 0x20FFFFFF);
+            }
+
             // Symbol on a dark tile, outlined red when the curse is on
             graphics.fill(left + 3, top + 1, left + 3 + ICON_SIZE + 2, top + 1 + ICON_SIZE + 2, 0xFF000000);
             ItemIcon.draw(graphics, curse.icon(), left + 4, top + 2, ICON_SIZE);

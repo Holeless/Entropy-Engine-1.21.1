@@ -3,7 +3,6 @@ package com.example.curses.client;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.example.curses.CursesMod;
 import com.example.curses.curse.Curse;
 import com.example.curses.curse.Curses;
 import com.example.curses.curse.PendingCurses;
@@ -16,87 +15,63 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.contents.TranslatableContents;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * The curses UI on the create-world screen (Game tab):
+ * The curses UI on the create-world screen (Game tab), kept as plain as a vanilla option:
  *
  * <ul>
- *   <li>the "Curses" button, placed directly under "Allow Cheats" with the same width and height</li>
- *   <li>a vanilla-style box to the right of the button column that shows an icon (a vanilla item) for every chosen
- *       curse; clicking an icon shows that curse's name and description at the bottom of the box</li>
+ *   <li>a "Curses... (N)" button directly under "Allow Cheats", same width and height. Its tooltip lists the
+ *       chosen curses by name.</li>
+ *   <li>under the button, one small slot per chosen curse showing its item, like an inventory row. Hovering a
+ *       slot shows that curse's name and description. If there is no room left above the Create / Cancel row the
+ *       row ends with "+N" (the button's tooltip still lists everything).</li>
  * </ul>
  *
- * <p>Everything is positioned relative to the vanilla "Allow Cheats" button, so it follows vanilla's layout
- * at any window size / GUI scale. Client only.</p>
- *
- * <p><b>Visibility rules:</b> every chosen curse always gets an icon (the icons shrink from {@link #SLOT_MAX}
- * to {@link #SLOT_MIN} pixels until they all fit, and the box grows down to the footer). The info area is sized
- * to the selected curse's text; if it still cannot hold all of it, it ends with "..." and hovering it shows the
- * full text. Hovering any icon shows a tooltip with the full name and description, wrapped to the screen so it
- * never runs off it.</p>
+ * <p>Positioned relative to the vanilla widgets, so it follows vanilla's layout at any size. Client only.</p>
  */
 public final class CursePanel {
-    private static final ResourceLocation TEXT_FIELD = ResourceLocation.withDefaultNamespace("widget/text_field");
-
     private static final String CHEATS_KEY = "selectWorld.allowCommands";
     private static final int ROW_GAP = 8;          // vanilla spacing between rows of the Game tab
-    private static final int BOX_GAP = 10;         // space between the button column and the box
-    private static final int EDGE_MARGIN = 10;     // space kept free at the right edge of the screen
-    private static final int FOOTER_RESERVE = 38;  // the box never reaches into the Create / Cancel row
-    private static final int MAX_WIDTH = 220;
-    private static final int MIN_WIDTH = 60;
-    private static final int PADDING = 5;
-    private static final int INFO_PAD = 4;
-    private static final int SLOT_MAX = 22;
-    private static final int SLOT_MIN = 16;
-    private static final int SLOT_GAP = 2;
-    private static final int ICON_MAX = 16;
-    private static final int ICON_INFO_GAP = 4;    // space between the icon grid and the separator
+    private static final int ICON_GAP = 4;         // space between the button and the icon row
+    private static final int SLOT = 18;            // 16px item plus a pixel each side
+    private static final int FOOTER_RESERVE = 38;  // never reach into the Create / Cancel row
     private static final int TOOLTIP_MAX_WIDTH = 220;
 
     private static Screen owner;
     private static Button button;
-    private static ResourceLocation selected;
-    private static Screen loggedScreen;
+    private static String signature;
 
-    // Geometry of the box, refreshed every frame by layout() / render()
     private static boolean shown;
-    private static int boxX;
-    private static int boxY;
-    private static int boxW;
-    private static int boxH;
-    private static int slotSize = SLOT_MAX;
-    private static int slotCols = 1;
+    private static int rowX;
+    private static int rowY;
+    private static int rowW;
 
     private CursePanel() {
     }
 
     public static void attach(Screen screen, Button curseButton) {
-        if (owner != screen) {
-            selected = null;
-        }
         owner = screen;
         button = curseButton;
+        signature = null; // forces the label and tooltip to be written on the first frame
         shown = false;
     }
 
     public static void detach() {
         owner = null;
         button = null;
-        selected = null;
+        signature = null;
         shown = false;
     }
 
-    /** Places the button and the box under the Game tab's buttons; hides both on other tabs. */
+    /** Places the button under the Game tab's buttons; hides everything on other tabs. */
     public static void layout(CreateWorldScreen screen) {
         shown = false;
         if (button == null || owner != screen) {
@@ -105,169 +80,98 @@ public final class CursePanel {
         List<AbstractWidget> column = findGameColumn(screen);
         if (column.isEmpty()) {
             button.visible = false; // not the Game tab
-            logOnce(screen);
             return;
         }
 
-        // The column is [world name box, game mode, difficulty, allow commands]: the Curses button goes
-        // under the lowest one, the box spans the whole column down to the Curses button (and further down
-        // when there is room, so a long list of curses has space).
         AbstractWidget lowest = column.get(0);
-        int top = Integer.MAX_VALUE;
         for (AbstractWidget widget : column) {
             if (widget.getY() > lowest.getY()) {
                 lowest = widget;
             }
-            top = Math.min(top, widget.getY());
         }
-        int colX = lowest.getX();
-        int colW = lowest.getWidth();
         int buttonY = lowest.getY() + lowest.getHeight() + ROW_GAP;
-
-        button.setX(colX);
+        button.setX(lowest.getX());
         button.setY(buttonY);
-        button.setWidth(colW);
+        button.setWidth(lowest.getWidth());
         button.setHeight(lowest.getHeight());
         button.visible = true;
 
-        boxX = colX + colW + BOX_GAP;
-        boxY = top;
-        boxW = Math.min(MAX_WIDTH, screen.width - boxX - EDGE_MARGIN);
-        int columnHeight = buttonY + button.getHeight() - top;
-        int roomHeight = screen.height - FOOTER_RESERVE - top;
-        boxH = Math.max(columnHeight, roomHeight);
-        shown = boxW >= MIN_WIDTH;
+        refreshButton(chosenCurses());
+
+        rowX = lowest.getX();
+        rowY = buttonY + button.getHeight() + ICON_GAP;
+        rowW = lowest.getWidth();
+        shown = true;
+    }
+
+    /** Rewrites the label and tooltip, but only when the selection has changed. */
+    private static void refreshButton(List<Curse> chosen) {
+        StringBuilder sb = new StringBuilder();
+        for (Curse curse : chosen) {
+            sb.append(curse.id()).append(';');
+        }
+        String now = sb.toString();
+        if (now.equals(signature)) {
+            return;
+        }
+        signature = now;
+        button.setMessage(Component.translatable("curses.create.button", chosen.size()));
+        if (chosen.isEmpty()) {
+            button.setTooltip(Tooltip.create(Component.translatable("curses.create.tooltip")));
+            return;
+        }
+        MutableComponent text = Component.translatable("curses.create.tooltip.chosen").withStyle(ChatFormatting.GRAY);
+        for (Curse curse : chosen) {
+            text.append("\n").append(curse.name().copy().withStyle(ChatFormatting.RED));
+        }
+        button.setTooltip(Tooltip.create(text));
     }
 
     public static void render(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (!shown) {
+        if (!shown || button == null || !button.visible) {
+            return;
+        }
+        List<Curse> chosen = chosenCurses();
+        if (chosen.isEmpty()) {
             return;
         }
         Font font = Minecraft.getInstance().font;
-        graphics.blitSprite(TEXT_FIELD, boxX, boxY, boxW, boxH);
+        int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
 
-        List<Curse> chosen = chosenCurses();
-        int innerW = boxW - 2 * PADDING;
-        int lineH = font.lineHeight + 1;
+        int perRow = Math.max(1, rowW / SLOT);
+        int rowsFit = Math.max(0, (screenHeight - FOOTER_RESERVE - rowY) / SLOT);
+        int capacity = perRow * rowsFit;
+        boolean overflow = chosen.size() > capacity;
+        int drawn = overflow ? Math.max(0, capacity - 1) : chosen.size();
 
-        if (chosen.isEmpty()) {
-            List<FormattedCharSequence> lines = font.split(Component.translatable("curses.panel.empty"), innerW);
-            int y = boxY + PADDING + 4;
-            for (FormattedCharSequence line : lines) {
-                graphics.drawString(font, line, boxX + (boxW - font.width(line)) / 2, y, 0xA0A0A0, true);
-                y += lineH;
-            }
-            return;
-        }
-
-        Curse info = selectedCurse(chosen);
-
-        // ---- Work out how the box is split between the icon grid and the info text ----
-        List<FormattedCharSequence> nameLines = info == null ? List.of() : font.split(info.name(), innerW);
-        List<FormattedCharSequence> textLines =
-                font.split(info == null ? Component.translatable("curses.panel.hint") : info.description(), innerW);
-        int neededInfo = INFO_PAD + nameLines.size() * lineH + (info == null ? 0 : 3) + textLines.size() * lineH + INFO_PAD;
-
-        // The icons at their smallest size decide how much room the text can have.
-        int minGrid = gridHeight(chosen.size(), SLOT_MIN, innerW);
-        int maxInfo = boxH - 2 * PADDING - minGrid - ICON_INFO_GAP;
-        int infoH = Math.max(0, Math.min(neededInfo, maxInfo));
-        boolean truncated = neededInfo > infoH;
-
-        // Biggest icons that still all fit above the info area.
-        int iconsAvailable = boxH - 2 * PADDING - infoH - ICON_INFO_GAP;
-        int slot = SLOT_MAX;
-        while (slot > SLOT_MIN && gridHeight(chosen.size(), slot, innerW) > iconsAvailable) {
-            slot--;
-        }
-        slotSize = slot;
-        slotCols = columnsFor(slot, innerW);
-        int infoTop = boxY + boxH - infoH;
-
-        // ---- Icons ----
-        Curse hoveredCurse = null;
-        int icon = Math.min(ICON_MAX, slot - 2);
-        for (int i = 0; i < chosen.size(); i++) {
-            int[] pos = slotPosition(i);
+        Curse hovered = null;
+        for (int i = 0; i < drawn; i++) {
+            int x = rowX + (i % perRow) * SLOT;
+            int y = rowY + (i / perRow) * SLOT;
             Curse curse = chosen.get(i);
-            boolean isSelected = curse == info;
-            boolean hovered = isInSlot(mouseX, mouseY, pos);
-            if (hovered) {
-                hoveredCurse = curse;
-            }
-            int outline = isSelected ? 0xFFFFFFFF : hovered ? 0xFFA0A0A0 : 0xFF555555;
-            graphics.fill(pos[0], pos[1], pos[0] + slot, pos[1] + slot, 0xFF000000);
-            ItemIcon.draw(graphics, curse.icon(), pos[0] + (slot - icon) / 2, pos[1] + (slot - icon) / 2, icon);
-            graphics.renderOutline(pos[0], pos[1], slot, slot, outline);
-        }
-
-        // ---- Info area ----
-        if (infoH >= lineH) {
-            graphics.fill(boxX + PADDING, infoTop, boxX + boxW - PADDING, infoTop + 1, 0xFF555555);
-            int textX = boxX + PADDING;
-            int bottomLimit = boxY + boxH - INFO_PAD - (truncated ? lineH : 0);
-            int y = infoTop + INFO_PAD;
-
-            for (FormattedCharSequence line : nameLines) {
-                if (y + font.lineHeight > bottomLimit) {
-                    break;
-                }
-                graphics.drawString(font, line, textX, y, 0xFF5555, true);
-                y += lineH;
-            }
-            if (info != null) {
-                y += 3;
-            }
-            int color = info == null ? 0xA0A0A0 : 0xD0D0D0;
-            for (FormattedCharSequence line : textLines) {
-                if (y + font.lineHeight > bottomLimit) {
-                    break;
-                }
-                graphics.drawString(font, line, textX, y, color, true);
-                y += lineH;
-            }
-            if (truncated) {
-                graphics.drawString(font, "...", textX, boxY + boxH - INFO_PAD - font.lineHeight, 0xFFFFFF, true);
-            }
-            if (hoveredCurse == null && truncated && info != null
-                    && mouseX >= boxX && mouseX < boxX + boxW && mouseY >= infoTop && mouseY < boxY + boxH) {
-                hoveredCurse = info; // the info text is cut off: hovering it shows everything
-            }
-        } else if (hoveredCurse == null && info != null && truncated
-                && mouseX >= boxX && mouseX < boxX + boxW && mouseY >= infoTop && mouseY < boxY + boxH) {
-            hoveredCurse = info;
-        }
-
-        // ---- Tooltip (drawn last so nothing covers it) ----
-        if (hoveredCurse != null) {
-            renderTooltip(graphics, font, hoveredCurse, mouseX, mouseY);
-        }
-    }
-
-    /** Name and full description, wrapped to the screen; vanilla keeps the tooltip inside the window. */
-    private static void renderTooltip(GuiGraphics graphics, Font font, Curse curse, int mouseX, int mouseY) {
-        int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int maxWidth = Math.max(60, Math.min(TOOLTIP_MAX_WIDTH, screenWidth - 24));
-        List<FormattedCharSequence> lines = new ArrayList<>();
-        lines.addAll(font.split(curse.name().copy().withStyle(ChatFormatting.RED), maxWidth));
-        lines.addAll(font.split(curse.description(), maxWidth));
-        graphics.renderTooltip(font, lines, mouseX, mouseY);
-    }
-
-    /** Selects the clicked icon. Returns true if the click hit an icon (so the screen should ignore it). */
-    public static boolean mouseClicked(double mouseX, double mouseY) {
-        if (!shown) {
-            return false;
-        }
-        List<Curse> chosen = chosenCurses();
-        for (int i = 0; i < chosen.size(); i++) {
-            if (isInSlot(mouseX, mouseY, slotPosition(i))) {
-                selected = chosen.get(i).id();
-                Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
-                return true;
+            boolean over = mouseX >= x && mouseX < x + SLOT && mouseY >= y && mouseY < y + SLOT;
+            graphics.fill(x, y, x + SLOT - 1, y + SLOT - 1, 0xFF000000);
+            graphics.renderOutline(x, y, SLOT - 1, SLOT - 1, 0xFF555555);
+            ItemIcon.draw(graphics, curse.icon(), x + 1, y + 1, 16);
+            if (over) {
+                hovered = curse;
+                graphics.fill(x + 1, y + 1, x + SLOT - 2, y + SLOT - 2, 0x80FFFFFF);
             }
         }
-        return false;
+        if (overflow && capacity > 0) {
+            int x = rowX + (drawn % perRow) * SLOT;
+            int y = rowY + (drawn / perRow) * SLOT;
+            graphics.drawString(font, "+" + (chosen.size() - drawn), x + 2, y + 5, 0xFFFFFF, true);
+        }
+
+        if (hovered != null) {
+            int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+            int maxWidth = Math.max(60, Math.min(TOOLTIP_MAX_WIDTH, screenWidth - 24));
+            List<FormattedCharSequence> lines = new ArrayList<>();
+            lines.addAll(font.split(hovered.name().copy().withStyle(ChatFormatting.RED), maxWidth));
+            lines.addAll(font.split(hovered.description(), maxWidth));
+            graphics.renderTooltip(font, lines, mouseX, mouseY);
+        }
     }
 
     private static List<Curse> chosenCurses() {
@@ -280,42 +184,9 @@ public final class CursePanel {
         return result;
     }
 
-    /** The curse whose info is shown, or null (nothing clicked yet, or it has since been unticked). */
-    private static Curse selectedCurse(List<Curse> chosen) {
-        for (Curse curse : chosen) {
-            if (curse.id().equals(selected)) {
-                return curse;
-            }
-        }
-        return null;
-    }
-
-    private static int columnsFor(int slot, int innerW) {
-        return Math.max(1, (innerW + SLOT_GAP) / (slot + SLOT_GAP));
-    }
-
-    /** Height of the icon grid for this many icons at this slot size. */
-    private static int gridHeight(int count, int slot, int innerW) {
-        int cols = columnsFor(slot, innerW);
-        int rows = (count + cols - 1) / cols;
-        return rows * (slot + SLOT_GAP) - SLOT_GAP;
-    }
-
-    /** Top-left corner of slot i (every chosen curse has one: the grid is sized to fit them all). */
-    private static int[] slotPosition(int index) {
-        int x = boxX + PADDING + (index % slotCols) * (slotSize + SLOT_GAP);
-        int y = boxY + PADDING + (index / slotCols) * (slotSize + SLOT_GAP);
-        return new int[] {x, y};
-    }
-
-    private static boolean isInSlot(double mouseX, double mouseY, int[] pos) {
-        return mouseX >= pos[0] && mouseX < pos[0] + slotSize && mouseY >= pos[1] && mouseY < pos[1] + slotSize;
-    }
-
     /**
      * The widgets of the Game tab's column of buttons (empty when another tab is open). The Game tab is
-     * recognised by its world-name box (the only text box whose content is the world's name), with the
-     * "Allow Commands" button as a fallback.
+     * recognised by its world-name box, with the "Allow Commands" button as a fallback.
      */
     private static List<AbstractWidget> findGameColumn(CreateWorldScreen screen) {
         AbstractWidget reference = null;
@@ -351,7 +222,6 @@ public final class CursePanel {
         return column;
     }
 
-    /** The button's text is "<name>: <value>", i.e. a translatable whose first argument is the option name. */
     private static boolean isCheatsLabel(Component message) {
         if (message.getContents() instanceof TranslatableContents label) {
             for (Object arg : label.getArgs()) {
@@ -363,23 +233,5 @@ public final class CursePanel {
             }
         }
         return false;
-    }
-
-    /** Diagnostics: if the Game tab is never found, list what the screen contains (once per screen). */
-    private static void logOnce(CreateWorldScreen screen) {
-        if (loggedScreen == screen) {
-            return;
-        }
-        // Only log when no tab content at all is recognised on the very first frames; other tabs are normal
-        loggedScreen = screen;
-        StringBuilder sb = new StringBuilder("Create-world widgets (Game tab not recognised yet):");
-        for (GuiEventListener child : screen.children()) {
-            sb.append("\n  ").append(child.getClass().getSimpleName());
-            if (child instanceof AbstractWidget widget) {
-                sb.append(" '").append(widget.getMessage().getString()).append("' x=").append(widget.getX())
-                        .append(" y=").append(widget.getY()).append(" w=").append(widget.getWidth());
-            }
-        }
-        CursesMod.LOGGER.info(sb.toString());
     }
 }

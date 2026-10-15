@@ -17,8 +17,8 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
 /**
- * Hooks the create-world screen: adds the "Curses" button under "Allow Cheats" (Game tab) and the box of
- * chosen curses next to the buttons. All layout and drawing lives in {@link CursePanel}.
+ * Hooks the create-world screen: adds the "Curses..." button under "Allow Cheats" (Game tab) and the row of
+ * chosen-curse icons below it. All layout and drawing lives in {@link CursePanel}.
  */
 @EventBusSubscriber(value = Dist.CLIENT, modid = CursesMod.MOD_ID)
 public final class CursesClientEvents {
@@ -31,8 +31,8 @@ public final class CursesClientEvents {
             return;
         }
 
-        // Position and size are set every frame by CursePanel.layout (it follows the Allow Cheats button),
-        // and the button is hidden whenever the Game tab is not the open tab.
+        // Position, size, label and tooltip are set by CursePanel.layout every frame it changes; the button is
+        // hidden whenever the Game tab is not the open tab.
         Button button = Button.builder(
                         Component.translatable("curses.create.button", PendingCurses.count()),
                         pressed -> Minecraft.getInstance().setScreen(new CurseSelectionScreen(screen)))
@@ -55,14 +55,6 @@ public final class CursesClientEvents {
     public static void onRenderPost(ScreenEvent.Render.Post event) {
         if (event.getScreen() instanceof CreateWorldScreen) {
             CursePanel.render(event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
-        }
-    }
-
-    @SubscribeEvent
-    public static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-        if (event.getScreen() instanceof CreateWorldScreen && event.getButton() == 0
-                && CursePanel.mouseClicked(event.getMouseX(), event.getMouseY())) {
-            event.setCanceled(true);
         }
     }
 

@@ -4,7 +4,7 @@
   "item.curses.splash_potion_of_milk": "Splash Potion of Milk",
   "item.curses.potion_of_levitation": "Potion of Levitation",
   "curses.screen.title": "Curses",
-  "curses.create.button": "Curses (%s)",
+  "curses.create.button": "Curses... (%s)",
   "curses.create.tooltip": "Choose curses that affect the whole world.",
   "curses.panel.empty": "No curses chosen",
   "curses.panel.hint": "Click a curse to see what it does",
@@ -67,5 +67,8 @@
   "curse.curses.tools.name": "Tools",
   "curse.curses.tools.description": "Zombies have a chance to spawn with a pickaxe or an axe, and use it to dig through blocks to get to you",
   "curse.curses.sunproof.name": "Sunproof",
-  "curse.curses.sunproof.description": "Mobs do not catch fire in sunlight"
+  "curse.curses.sunproof.description": "Mobs do not catch fire in sunlight",
+  "curses.create.tooltip.chosen": "Chosen curses:",
+  "curses.screen.clear": "Clear All",
+  "curses.screen.count": "%s of %s chosen"
 }
