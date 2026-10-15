@@ -1,74 +1,105 @@
 package com.example.curses.effect;
 
-import java.util.Map;
-import java.util.WeakHashMap;
-
-import com.example.curses.CursesMod;
-import com.example.curses.curse.CurseData;
-import com.example.curses.curse.Curses;
-import com.example.curses.registry.CursesItems;
-
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ThrownPotion;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 /**
- * Incendiary, siege part: a witch that cannot walk to a nearby player (they are walled in, or up a pillar)
- * lobs Molotov Cocktails at them every few seconds, whether or not it can see them, to burn the shelter down.
- * The molotov bursts on the first wall it meets and sets fire to whatever around it can burn
- * ({@code IncendiaryHandler} does the bursting).
+ * Shared helpers for mobs that try to break into a player's shelter (Ordnance, Incendiary).
  *
- * <p>Server only. Separate from {@code IncendiaryHandler} so that file stays as it was.</p>
+ * <p>"Sealed in" means: a player is close, and the mob has no walking route to them (walls, a closed door,
+ * a pillar). Vanilla mobs just stand outside in that case; the curses use this to make them act.</p>
  */
-@EventBusSubscriber(modid = CursesMod.MOD_ID)
-public final class IncendiarySiegeHandler {
-    private static final int SIEGE_CHECK = 20;       // ticks between checks per witch
-    private static final int COOLDOWN = 120;         // ticks between throws
-    private static final double MIN_DIST = 4.0;      // the fire must not start on the thrower
+public final class Siege {
+    /** Mobs only path about 16 blocks, so a failed path check is only meaningful this close. */
+    public static final double PATH_RANGE = 15.0;
 
-    // Server thread only.
-    private static final Map<Witch, Long> READY = new WeakHashMap<>();
+    private static final double THROW_SPEED = 1.3;
 
-    private IncendiarySiegeHandler() {
+    private Siege() {
     }
 
-    @SubscribeEvent
-    public static void onServerStopped(ServerStoppedEvent event) {
-        READY.clear();
+    /**
+     * The nearest player within {@link #PATH_RANGE} (at least {@code minDist} away) that this mob cannot walk
+     * to, or null. Creative and spectator players never count. A path search is made, so call this sparingly.
+     */
+    public static Player sealedPlayer(Mob mob, ServerLevel level, double minDist) {
+        Player player = level.getNearestPlayer(mob, PATH_RANGE);
+        if (player == null || !player.isAlive() || player.isCreative() || player.isSpectator()) {
+            return null;
+        }
+        if (mob.distanceToSqr(player) < minDist * minDist) {
+            return null;
+        }
+        Path path = mob.getNavigation().createPath(player, 0);
+        return path == null || !path.canReach() ? player : null;
     }
 
-    @SubscribeEvent
-    public static void onWitchTick(EntityTickEvent.Post event) {
-        if (!(event.getEntity() instanceof Witch witch) || witch.level().isClientSide()) {
-            return;
+    /**
+     * Lobs a thrown "potion" showing {@code stack} (dynamite, a molotov) so it comes down at {@code aim}.
+     * A wall in the way simply makes it burst there, which is the point. Returns false if the spot is out of reach.
+     */
+    public static boolean lobPotion(Witch witch, ServerLevel level, Vec3 aim, ItemStack stack) {
+        ThrownPotion thrown = new ThrownPotion(level, witch);
+        thrown.setItem(stack);
+
+        Vec3 from = thrown.position();
+        double dx = aim.x - from.x;
+        double dz = aim.z - from.z;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance < 1.0) {
+            return false;
         }
-        if (!witch.isAlive() || witch.isDrinkingPotion() || (witch.tickCount + witch.getId()) % SIEGE_CHECK != 0) {
-            return;
-        }
-        ServerLevel level = (ServerLevel) witch.level();
-        if (!CurseData.isActive(level.getServer(), Curses.INCENDIARY)) {
-            return;
-        }
-        long now = level.getGameTime();
-        Long ready = READY.get(witch);
-        if (ready != null && now < ready) {
-            return;
+        double angle = findAngle(distance, aim.y - from.y);
+        if (Double.isNaN(angle)) {
+            return false;
         }
 
-        Player victim = Siege.sealedPlayer(witch, level, MIN_DIST);
-        if (victim == null) {
-            return;
+        double cos = Math.cos(angle);
+        thrown.shoot(dx / distance * cos, Math.sin(angle), dz / distance * cos, (float) THROW_SPEED, 1.0F);
+        witch.playSound(SoundEvents.WITCH_THROW, 1.0F, 0.8F + witch.getRandom().nextFloat() * 0.4F);
+        level.addFreshEntity(thrown);
+        return true;
+    }
+
+    /**
+     * The launch angle (radians) at which a potion fired at {@link #THROW_SPEED} comes down {@code distance}
+     * blocks away and {@code dy} blocks above where it started (the game's own motion rules: move, 1% drag,
+     * 0.05 gravity, tried for every whole degree). NaN if nothing lands within about 2 blocks of the spot.
+     */
+    private static double findAngle(double distance, double dy) {
+        double best = Double.NaN;
+        double bestError = 2.0;
+        for (int degrees = -10; degrees <= 60; degrees++) {
+            double angle = Math.toRadians(degrees);
+            double vx = THROW_SPEED * Math.cos(angle);
+            double vy = THROW_SPEED * Math.sin(angle);
+            double x = 0.0;
+            double y = 0.0;
+            for (int tick = 0; tick < 100; tick++) {
+                double px = x;
+                double py = y;
+                x += vx;
+                y += vy;
+                vx *= 0.99;
+                vy = vy * 0.99 - 0.05;
+                if (py > dy && y <= dy) {
+                    double landed = px + (x - px) * ((py - dy) / (py - y));
+                    double error = Math.abs(landed - distance);
+                    if (error < bestError) {
+                        bestError = error;
+                        best = angle;
+                    }
+                    break;
+                }
+            }
         }
-        Vec3 aim = victim.position().add(0.0, 1.0, 0.0);
-        if (Siege.lobPotion(witch, level, aim, new ItemStack(CursesItems.MOLOTOV.get()))) {
-            READY.put(witch, now + COOLDOWN);
-            CursesMod.LOGGER.debug("Incendiary: witch at {} threw a molotov at a sealed-in player", witch.blockPosition());
-        }
+        return best;
     }
 }
