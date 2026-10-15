@@ -48,10 +48,16 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
  * </ul>
  *
  * <p>Shots are noticed by watching for projectiles that join the world with such a mob as their owner. Server
- * only.</p>
+ * only. Spiders carrying a ranged rider use the same backpedal, see {@link JockeyKiteGoal}.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class KitingHandler {
+    /**
+     * Share of a mob's normal walking pace it backs away at (1.0 = exactly as fast as it walks, which is the pace
+     * a mob runs away at).
+     */
+    public static final double BACKPEDAL_SPEED = 1.0;
+
     // Server thread only.
     /** Game time of each mob's last shot. */
     static final Map<Mob, Long> LAST_SHOT = new WeakHashMap<>();
@@ -80,18 +86,31 @@ public final class KitingHandler {
     }
 
     /**
-     * Closer than this, the mob backs away. About 60% of the range its own attack goal works at, so it always
-     * stays inside that range and keeps shooting: bows 15 blocks, crossbows 8, witches and tridents 10.
+     * Closer than this, the mob backs away. Well inside the range its own attack goal works at (bows 15 blocks,
+     * crossbows 8, witches and tridents 10), so it only retreats when you are right on top of it and keeps shooting:
+     * bows 7 blocks, crossbows 4, everything else 5.
      */
     static double kiteRange(Mob mob) {
         Item item = mob.getMainHandItem().getItem();
         if (item instanceof CrossbowItem) {
-            return 5.0;
+            return 4.0;
         }
         if (item instanceof BowItem) {
-            return 9.0;
+            return 7.0;
         }
-        return 6.0;
+        return 5.0;
+    }
+
+    /** The range a mob's own attack goal shoots at: bows 15 blocks, crossbows 8, everything else 10. */
+    static double fireRange(Mob mob) {
+        Item item = mob.getMainHandItem().getItem();
+        if (item instanceof CrossbowItem) {
+            return 8.0;
+        }
+        if (item instanceof BowItem) {
+            return 15.0;
+        }
+        return 10.0;
     }
 
     /** A spot a mob of this height can stand on: free body space, solid floor, nothing that hurts. */

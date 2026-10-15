@@ -93,7 +93,7 @@
   "curse.curses.selective_breeding.description": "Pigs are Hoglins. Cows and Mooshrooms are Ravagers",
 
   "curse.curses.beast_of_burden.name": "Beast of Burden",
-  "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you. A horse, donkey or mule always runs and obeys its rider; a spider stays in control of itself",
+  "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you. Skeletons and Zombies have a 1% chance to spawn on a Skeleton Horse or Zombie Horse. A horse, donkey or mule always runs and obeys its rider; a spider stays in control of itself, climbing to reach you, and when it carries a ranged mob it holds its distance and backs away once you are in firing range",
 
   "curse.curses.breach.name": "Breach",
   "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you",
