@@ -78,6 +78,15 @@ public final class Curses {
     /** Hostile mobs always know where you are, within render distance. */
     public static final Curse OMNISCIENCE = register("omniscience");
 
+    /** Creepers may spawn 80% transparent, and those creepers make no sound when they ignite. */
+    public static final Curse INCONSPICUOUS = register("inconspicuous");
+
+    /** Ranged mobs back away from you while attacking, and hide behind cover between shots. */
+    public static final Curse KITING = register("kiting");
+
+    /** Pigs are Hoglins; cows and mooshrooms are Ravagers. */
+    public static final Curse SELECTIVE_BREEDING = register("selective_breeding");
+
     private Curses() {
     }
 
