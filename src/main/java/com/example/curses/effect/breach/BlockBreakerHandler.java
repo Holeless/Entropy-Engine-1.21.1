@@ -14,6 +14,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.EntityTypeTags;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -26,6 +27,7 @@ import net.minecraft.world.entity.monster.AbstractSkeleton;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.piglin.AbstractPiglin;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
@@ -37,19 +39,24 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
- * Breach, the hands: undead and piglins (not skeletons) break blocks with their bare hands to get to you.
+ * Breach, the hands (and Tools, the tools): undead and piglins (not skeletons) break blocks to get to you.
  *
  * <p><b>Who:</b> every undead mob that walks (zombies, husks, zombie villagers, zombified piglins, zoglins...) and
  * every piglin and brute. Skeletons (strays, wither skeletons, boggeds), phantoms, the Wither and undead horses
  * are left out. A rider from Beast of Burden counts too: it breaks blocks from the saddle, and since it is taller
  * on a mount it clears a 3-block-high opening.</p>
  *
+ * <p><b>Which curse:</b> with Breach on, all of them dig bare-handed. With Tools on, a mob that holds a pickaxe or an
+ * axe (see {@code ToolsHandler}) digs too, even if Breach is off, and it is much faster on the blocks its tool is
+ * made for (see {@link #miningTicks}).</p>
+ *
  * <p><b>When:</b> the mob has a player as its target (Omniscience hands them out), is within
  * {@link #HUNT_RANGE} blocks, has hardly moved for about 40 ticks, and a path search says it cannot walk to the
  * player. Then it looks at the blocks in front of it, toward the player: a level approach takes the blocks in its
  * way, a player above takes the blocks overhead and in front (so it can climb), a player below takes the floor in
  * front (so it can drop). It mines the first solid block with a crack animation and hit sounds, then the block
- * breaks and drops like a normal one. Time depends on hardness: dirt about 1.7 s, stone 3.2 s, planks 4 s.</p>
+ * breaks and drops like a normal one. Time depends on hardness: dirt about 1.7 s, stone 3.2 s, planks 4 s by hand;
+ * stone about 1 s with a stone pickaxe.</p>
  *
  * <p><b>Limits:</b> never breaks bedrock, obsidian and other things with a blast resistance of 100 or more, anything
  * harder than 10, or anything with a block entity (chests, furnaces, beds, spawners). Respects the
@@ -69,6 +76,7 @@ public final class BlockBreakerHandler {
     private static final int RETRY_CLEAR = 40;           // nothing solid in front: look again later
     private static final int RETRY_HARD = 80;            // something unbreakable in front
     private static final int BASE_TICKS = 20;
+    private static final int TOOL_BASE_TICKS = 10;       // swing-up time with the right tool
     private static final float TICKS_PER_HARDNESS = 30.0F;
     private static final double REACH_SQR = 3.5 * 3.5;
 
@@ -119,6 +127,28 @@ public final class BlockBreakerHandler {
         return mob.getNavigation() instanceof GroundPathNavigation;
     }
 
+    /** The pickaxe or axe the mob digs with (Tools curse), or an empty stack if it has none or the curse is off. */
+    private static ItemStack diggingTool(ServerLevel level, Mob mob) {
+        ItemStack held = mob.getMainHandItem();
+        if ((held.is(ItemTags.PICKAXES) || held.is(ItemTags.AXES))
+                && CurseData.isActive(level.getServer(), Curses.TOOLS)) {
+            return held;
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** Ticks to mine this block: fast with a tool that suits it, the bare-hand time otherwise. */
+    private static int miningTicks(ServerLevel level, BlockPos pos, BlockState block, ItemStack tool) {
+        float hardness = Math.max(0.0F, Math.min(10.0F, block.getDestroySpeed(level, pos)));
+        if (!tool.isEmpty()) {
+            float speed = tool.getDestroySpeed(block);
+            if (speed > 1.0F) { // 1.0 means the tool is no better than a hand on this block
+                return TOOL_BASE_TICKS + (int) Math.ceil(hardness * TICKS_PER_HARDNESS / speed);
+            }
+        }
+        return BASE_TICKS + (int) (hardness * TICKS_PER_HARDNESS);
+    }
+
     /** A block a hand can break: solid enough to matter, not too hard, not a container. Also used by the Endermen. */
     static boolean breakable(ServerLevel level, BlockPos pos, BlockState state) {
         if (state.isAir() || state.hasBlockEntity()) {
@@ -148,8 +178,9 @@ public final class BlockBreakerHandler {
             return;
         }
         ServerLevel level = (ServerLevel) mob.level();
-        if (!CurseData.isActive(level.getServer(), Curses.BREACH)
-                || !level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
+        ItemStack tool = diggingTool(level, mob);
+        boolean breach = CurseData.isActive(level.getServer(), Curses.BREACH);
+        if ((!breach && tool.isEmpty()) || !level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
             if (mining) {
                 cancel(level, mob, state);
             }
@@ -162,7 +193,7 @@ public final class BlockBreakerHandler {
         if (mining) {
             continueMining(level, mob, state);
         } else {
-            decide(level, mob, state);
+            decide(level, mob, state, tool);
         }
     }
 
@@ -170,7 +201,7 @@ public final class BlockBreakerHandler {
     // Deciding to mine
     // ---------------------------------------------------------------------------------------------------
 
-    private static void decide(ServerLevel level, Mob mob, State state) {
+    private static void decide(ServerLevel level, Mob mob, State state, ItemStack tool) {
         if (!(targetOf(mob) instanceof Player player) || !player.isAlive() || player.isCreative()
                 || player.isSpectator() || player.level() != level) {
             state.still = 0;
@@ -219,8 +250,7 @@ public final class BlockBreakerHandler {
             state.mining = pos.immutable();
             state.progress = 0;
             state.stage = -1;
-            float hardness = Math.max(0.0F, Math.min(10.0F, block.getDestroySpeed(level, pos)));
-            state.needed = BASE_TICKS + (int) (hardness * TICKS_PER_HARDNESS);
+            state.needed = miningTicks(level, pos, block, tool);
             return;
         }
         state.retryAt = now + RETRY_CLEAR;

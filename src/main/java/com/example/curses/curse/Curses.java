@@ -93,6 +93,9 @@ public final class Curses {
     /** Endermen move placed blocks and build pathways; undead and piglins (not skeletons) break blocks by hand. */
     public static final Curse BREACH = register("breach");
 
+    /** Zombies may spawn with a pickaxe or an axe and use it to dig to you. */
+    public static final Curse TOOLS = register("tools");
+
     private Curses() {
     }
 

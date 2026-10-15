@@ -94,5 +94,8 @@
   "curse.curses.beast_of_burden.description": "Hostile mobs look for horses, donkeys, mules and spiders to ride, and ride them to you",
 
   "curse.curses.breach.name": "Breach",
-  "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you"
+  "curse.curses.breach.description": "Endermen move blocks you placed and build stairs and bridges for mobs that cannot reach you. Undead and Piglins break blocks with their bare hands to get to you",
+
+  "curse.curses.tools.name": "Tools",
+  "curse.curses.tools.description": "Zombies have a chance to spawn with a pickaxe or an axe, and use it to dig through blocks to get to you"
 }
