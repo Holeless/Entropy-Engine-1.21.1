@@ -61,7 +61,7 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  * are extra actions that are checked twice a second per witch, with cooldowns.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
-public final class CovenWitchHandler {
+public final class CovenHandler {
     private static final String KEY_MILK = "curses_coven_milk";
 
     private static final int CHECK_INTERVAL = 10;          // ticks between decisions per witch
@@ -129,7 +129,7 @@ public final class CovenWitchHandler {
     /** True while a milk potion is being thrown, so the join event can tag it. */
     private static boolean throwingMilk;
 
-    private CovenWitchHandler() {
+    private CovenHandler() {
     }
 
     private static boolean enabled(ServerLevel level) {
