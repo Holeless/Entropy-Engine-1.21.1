@@ -72,8 +72,11 @@ public final class Curses {
     /** Armor and tools have 2/3 of their durability, so they wear out faster. */
     public static final Curse BRITTLE = register("brittle");
 
-    /** Hostile mobs have double detection range. */
+    /** Hostile mobs have 2.25x detection range. */
     public static final Curse SAGACIOUS = register("sagacious");
+
+    /** Hostile mobs always know where you are, within render distance. */
+    public static final Curse OMNISCIENCE = register("omniscience");
 
     private Curses() {
     }

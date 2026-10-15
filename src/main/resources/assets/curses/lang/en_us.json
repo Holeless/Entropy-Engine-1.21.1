@@ -76,5 +76,8 @@
   "curse.curses.brittle.description": "Armor and tools lose durability faster",
 
   "curse.curses.sagacious.name": "Sagacious",
-  "curse.curses.sagacious.description": "Hostile mobs have double detection range"
+  "curse.curses.sagacious.description": "Hostile mobs have 2.25x detection range",
+
+  "curse.curses.omniscience.name": "Omniscience",
+  "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance"
 }

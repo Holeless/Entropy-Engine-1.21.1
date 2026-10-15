@@ -42,7 +42,7 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  * A carried creeper takes no fall damage.
  *
  * <b>Siege:</b> a phantom that has been near a player for a few seconds without being able to see them (they are
- * under a roof) is "besieging" that player, see {@link #siegeVictim}. It does not need a target for that, since
+ * under a roof) is "besieging" that player (and keeps doing so while it flies off to look for creepers), see {@link #siegeVictim}. It does not need a target for that, since
  * vanilla drops targets a phantom cannot see. A besieging phantom always goes for a creeper, searches wider, and
  * carries it to just above the roof (see {@link #targetY}) so the lit creeper lands on the roof and blows it open.
  */
@@ -68,6 +68,7 @@ public final class PayloadHandler {
 
     private static final double SIEGE_RANGE = 40.0;     // a player this close that the phantom cannot see...
     private static final int SIEGE_CHECK = 10;          // ... checked this often ...
+    private static final double SIEGE_MEMORY = 128.0;  // a siege is remembered while the phantom is within this of the player
     private static final int SIEGE_TICKS = 60;          // ... for this long, means the player is sealed in
     private static final double ROOF_CLEARANCE = 3.0;   // siege drops start this far above the highest block
     private static final double ROOF_MAX_HEIGHT = 16.0; // ... if that is no more than this above the player
@@ -171,7 +172,20 @@ public final class PayloadHandler {
             return;
         }
         Player near = phantom.level().getNearestPlayer(phantom, SIEGE_RANGE);
-        if (near == null || near.isCreative() || near.isSpectator() || phantom.hasLineOfSight(near)) {
+        if (near == null) {
+            // Away on a search for a creeper: an established siege is remembered while the player is still in range,
+            // so the phantom keeps working on a sealed-in player instead of going back to circling.
+            Blocked known = BLOCKED.get(phantom);
+            boolean remembered = known != null && known.ticks >= SIEGE_TICKS && known.player != null
+                    && known.player.isAlive() && !known.player.isCreative() && !known.player.isSpectator()
+                    && known.player.level() == phantom.level()
+                    && phantom.distanceToSqr(known.player) < SIEGE_MEMORY * SIEGE_MEMORY;
+            if (!remembered) {
+                BLOCKED.remove(phantom);
+            }
+            return;
+        }
+        if (near.isCreative() || near.isSpectator() || phantom.hasLineOfSight(near)) {
             BLOCKED.remove(phantom);
             return;
         }

@@ -17,11 +17,11 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 /**
- * Sagacious: hostile mobs have double detection range.
+ * Sagacious: hostile mobs have 2.25 times the detection range.
  *
  * <p>Vanilla mobs notice players (and path toward them) out to their {@code follow_range} attribute: 16 blocks
- * for most, 35 for zombies, and so on. While the curse is active every hostile mob gets a +100% modifier on that
- * attribute, so everything that uses it (spotting a target, chasing it, pathfinding to it) reaches twice as far.</p>
+ * for most, 35 for zombies, and so on. While the curse is active every hostile mob gets a +125% modifier on that
+ * attribute, so everything that uses it (spotting a target, chasing it, pathfinding to it) reaches 2.25 times as far.</p>
  *
  * <p>The modifier is applied when a mob joins the world and re-checked every 5 seconds, so mobs that already
  * exist pick it up when the curse is added and lose it again when it is lifted. It is not saved with the mob.
@@ -30,6 +30,8 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class SagaciousHandler {
     private static final ResourceLocation MODIFIER_ID = CursesMod.id("sagacious_follow_range");
+    /** Bonus on the base follow range: base x (1 + 1.25) = 2.25x. */
+    private static final double BONUS = 1.25;
     private static final int CHECK_INTERVAL = 100; // ticks
 
     private SagaciousHandler() {
@@ -61,8 +63,8 @@ public final class SagaciousHandler {
         }
         boolean has = range.hasModifier(MODIFIER_ID);
         if (on && !has) {
-            // Base x (1 + 1.0) = double
-            range.addTransientModifier(new AttributeModifier(MODIFIER_ID, 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+            // Base x (1 + 1.25) = 2.25x
+            range.addTransientModifier(new AttributeModifier(MODIFIER_ID, BONUS, AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
         } else if (!on && has) {
             range.removeModifier(MODIFIER_ID);
         }
