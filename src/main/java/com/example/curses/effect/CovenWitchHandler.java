@@ -3,15 +3,14 @@ package com.example.curses.effect;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.WeakHashMap;
 
 import com.example.curses.CursesMod;
 import com.example.curses.curse.CurseData;
 import com.example.curses.curse.Curses;
+import com.example.curses.registry.CursesItems;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
@@ -42,15 +41,16 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  *
  * <ul>
  *   <li><b>Self-levitation.</b> A witch that is hunting a player who is well above her (a tower, a pillar, a
- *       ledge) and has no walking route to them drinks a Potion of Levitation (a real drink: she holds the bottle
- *       for the normal 32 ticks, the effect is applied by vanilla's own witch code). While levitating she is
- *       nudged sideways toward the player. When she has risen to the player's height the levitation is cut and
- *       she gets a short Slow Falling, so she drifts down next to them instead of rising into the sky or taking
- *       fall damage.</li>
- *   <li><b>Curse cleansing.</b> A witch with a player in sight 5-14 blocks away lobs a Splash Potion of Milk when the
- *       player has more positive effects than negative ones. The milk is a splash potion with no effects and a
- *       white tint, tagged so that on impact it clears every effect from players in the splash radius (what milk
- *       does). Nothing else is touched.</li>
+ *       ledge) and has no walking route to them drinks a Levitation potion. She holds the mod's own
+ *       {@code curses:potion_of_levitation} item (your texture) for the normal 32-tick drink; vanilla's witch code only
+ *       applies the effects of a real potion, so when the drink ends this handler applies Levitation itself. While
+ *       levitating she is nudged sideways toward the player. When she has risen to the player's height the
+ *       levitation is cut and she gets a short Slow Falling, so she drifts down next to them instead of rising into
+ *       the sky or taking fall damage.</li>
+ *   <li><b>Curse cleansing.</b> A witch with a player in sight 5-14 blocks away lobs a Milk Potion when the
+ *       player has more positive effects than negative ones. The potion is the mod's own
+ *       {@code curses:splash_potion_of_milk} item (your texture), tagged so that on impact it clears every effect from
+ *       players in the splash radius (what milk does). Nothing else is touched.</li>
  *   <li><b>Ally support.</b> A witch that sees a burning hostile mob nearby throws a vanilla Splash Potion of Water
  *       at it (this puts the fire out). A moment later, if that mob is low on health, she most likely follows with
  *       a Splash Potion of Regeneration. Neither is ever thrown if a player is anywhere near the splash, and
@@ -85,7 +85,7 @@ public final class CovenWitchHandler {
     private static final float MILK_CHANCE = 0.4F;         // per check
     private static final int MILK_COOLDOWN = 300;          // per witch
     private static final int MILK_PLAYER_GRACE = 160;      // per player: no second milk this soon, whichever witch
-    private static final int MILK_COLOR = 0xFFFFFF;
+    private static final int MILK_COLOR = 0xFFFFFF;        // splash particle colour on impact
 
     // Ally support
     private static final double ALLY_RANGE = 14.0;
@@ -101,11 +101,14 @@ public final class CovenWitchHandler {
     private static final class Flight {
         final Player player;
         final long started;
+        final int duration;      // ticks of Levitation to apply when the drink finishes
+        boolean applied;         // Levitation has been applied
         boolean airborne;
 
-        Flight(Player player, long started) {
+        Flight(Player player, long started, int duration) {
             this.player = player;
             this.started = started;
+            this.duration = duration;
         }
     }
 
@@ -217,11 +220,11 @@ public final class CovenWitchHandler {
 
         double perTick = 0.05 * (LEV_AMPLIFIER + 1);
         int duration = Math.min(200, (int) Math.ceil(rise / perTick) + 20);
-        ItemStack potion = new ItemStack(Items.POTION);
-        potion.set(DataComponents.POTION_CONTENTS, new PotionContents(Optional.empty(), Optional.of(0xCEFFFF),
-                List.of(new MobEffectInstance(MobEffects.LEVITATION, duration, LEV_AMPLIFIER))));
 
-        // Vanilla's own witch code finishes the drink when its counter runs out and applies the potion's effects.
+        // The witch holds the mod's own levitation potion item (your texture) for the normal drinking time. Vanilla
+        // clears her hand when the drink ends but only applies effects for a real potion, so tickFlight applies
+        // the Levitation itself at that moment.
+        ItemStack potion = new ItemStack(CursesItems.LEVITATION_POTION.get());
         witch.setItemSlot(EquipmentSlot.MAINHAND, potion);
         witch.setUsingItem(true);
         witch.usingTime = potion.getUseDuration(witch);
@@ -229,7 +232,7 @@ public final class CovenWitchHandler {
         level.playSound(null, witch.getX(), witch.getY(), witch.getZ(), SoundEvents.WITCH_DRINK, witch.getSoundSource(),
                 1.0F, 0.8F + witch.getRandom().nextFloat() * 0.4F);
 
-        FLIGHTS.put(witch, new Flight(player, now));
+        FLIGHTS.put(witch, new Flight(player, now, duration));
         CursesMod.LOGGER.debug("Coven: witch at {} drinks levitation to reach a player {} blocks above", witch.blockPosition(), (int) rise);
     }
 
@@ -240,6 +243,17 @@ public final class CovenWitchHandler {
             return;
         }
         boolean levitating = witch.hasEffect(MobEffects.LEVITATION);
+
+        // The drink has finished (vanilla emptied her hand): apply the levitation the potion stands for.
+        if (!levitating && !flight.applied && !flight.airborne && !witch.isDrinkingPotion() && now > flight.started + 1) {
+            if (witch.getMainHandItem().is(CursesItems.LEVITATION_POTION.get())) {
+                witch.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            }
+            witch.addEffect(new MobEffectInstance(MobEffects.LEVITATION, flight.duration, LEV_AMPLIFIER));
+            flight.applied = true;
+            levitating = true;
+        }
+
         if (levitating) {
             flight.airborne = true;
         } else if (flight.airborne) {
@@ -249,6 +263,9 @@ public final class CovenWitchHandler {
             }
         } else {
             if (now - flight.started > FLIGHT_START_GRACE) {
+                if (witch.getMainHandItem().is(CursesItems.LEVITATION_POTION.get())) {
+                    witch.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+                }
                 FLIGHTS.remove(witch); // the drink never finished
             }
             return; // still drinking
@@ -309,8 +326,9 @@ public final class CovenWitchHandler {
             return false;
         }
 
-        ItemStack milk = new ItemStack(Items.SPLASH_POTION);
-        milk.set(DataComponents.POTION_CONTENTS, new PotionContents(Optional.empty(), Optional.of(MILK_COLOR), List.of()));
+        // The mod's own milk potion item (your texture). It is not a vanilla potion, so nothing else reacts to it;
+        // onImpact below clears the effects.
+        ItemStack milk = new ItemStack(CursesItems.MILK_POTION.get());
         if (!lob(witch, level, player.position().add(0.0, 1.0, 0.0), milk, true)) {
             MILK_READY.put(witch, now + 40);
             return false;

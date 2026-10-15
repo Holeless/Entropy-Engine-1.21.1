@@ -2,6 +2,8 @@
   "item.curses.molotov": "Molotov Cocktail",
   "item.curses.dynamite": "Dynamite",
   "item.curses.explosive_arrow": "Explosive Arrow",
+  "item.curses.splash_potion_of_milk": "Splash Potion of Milk",
+  "item.curses.potion_of_levitation": "Potion of Levitation",
   "entity.curses.explosive_arrow": "Explosive Arrow",
 
   "curses.screen.title": "Curses",
