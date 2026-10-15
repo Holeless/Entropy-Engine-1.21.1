@@ -10,19 +10,12 @@ import com.example.curses.curse.Curses;
 import com.example.curses.registry.CursesItems;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.monster.Creeper;
-import net.minecraft.world.entity.monster.Witch;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ThrownPotion;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.alchemy.PotionContents;
-import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -31,19 +24,18 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 /**
- * Incendiary: witches can throw Molotov Cocktails, and creepers set things on fire when they explode.
+ * Incendiary: angry villagers throw Molotov Cocktails, and creepers set things on fire when they explode.
  *
- * <p><b>Molotovs:</b> {@link #MOLOTOV_CHANCE} of the harmful potions a witch throws at a player (Harming,
- * Poison, Slowness, Weakness, including Coven's long-range throws) become a Molotov Cocktail instead. It is a
- * normal thrown potion in flight that shows the molotov texture. When it hits something it shatters and places
- * fire on the ground around the impact (only where fire can survive, and only while mob griefing is on).</p>
+ * <p><b>Molotovs:</b> thrown by villagers you have angered (see {@link AngryVillagerHandler}); witches do not throw
+ * them. A Molotov is a normal thrown potion in flight that shows the molotov texture. When it hits something it
+ * shatters (glass sound) and places fire on the ground around the impact (only where fire can survive, and only
+ * while mob griefing is on).</p>
  *
  * <p><b>Creepers:</b> one in three of the blocks a creeper's blast destroys is replaced by fire where it can
  * burn (the same rule vanilla fire explosions use). The fire is placed a tick after the blast, once the blocks
@@ -59,14 +51,9 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class IncendiaryHandler {
-    /** Chance for a harmful witch potion to be a molotov. */
-    private static final float MOLOTOV_CHANCE = 0.4F;
     private static final int FIRE_RADIUS = 2;
     private static final float FIRE_CHANCE = 0.6F;
-    /**
-     * Volume of the glass-shatter sound. The server only sends a sound to players within 16 blocks x volume, and
-     * witches throw from 24+ blocks (Coven), so at volume 1.0 many shatters were simply never sent to the player.
-     */
+    /** Volume of the glass-shatter sound: the server only sends sounds to players within 16 blocks x volume. */
     private static final float SHATTER_VOLUME = 2.5F;
 
     private record PendingFire(ServerLevel level, List<BlockPos> positions, long due) {
@@ -90,31 +77,6 @@ public final class IncendiaryHandler {
     // ---------------------------------------------------------------------------------------------------
     // Molotovs
     // ---------------------------------------------------------------------------------------------------
-
-    @SubscribeEvent
-    public static void onPotionJoin(EntityJoinLevelEvent event) {
-        if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof ThrownPotion potion)) {
-            return;
-        }
-        // Only potions thrown at players: buffs for other mobs are left alone.
-        if (!(potion.getOwner() instanceof Witch witch) || !(witch.getTarget() instanceof Player) || !enabled(level)) {
-            return;
-        }
-        ItemStack stack = potion.getItem();
-        if (!stack.is(Items.SPLASH_POTION) && !stack.is(Items.LINGERING_POTION)) {
-            return;
-        }
-        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
-        if (contents == null || !isHarmful(contents) || witch.getRandom().nextFloat() >= MOLOTOV_CHANCE) {
-            return;
-        }
-        potion.setItem(new ItemStack(CursesItems.MOLOTOV.get()));
-    }
-
-    private static boolean isHarmful(PotionContents contents) {
-        return contents.potion().map(p -> Potions.HARMING.equals(p) || Potions.POISON.equals(p)
-                || Potions.SLOWNESS.equals(p) || Potions.WEAKNESS.equals(p)).orElse(false);
-    }
 
     @SubscribeEvent
     public static void onImpact(ProjectileImpactEvent event) {

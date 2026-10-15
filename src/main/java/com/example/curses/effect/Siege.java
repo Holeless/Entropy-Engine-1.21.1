@@ -3,7 +3,6 @@ package com.example.curses.effect;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ThrownPotion;
 import net.minecraft.world.item.ItemStack;
@@ -11,7 +10,8 @@ import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Shared helpers for mobs that try to break into a player's shelter (Ordnance, Incendiary).
+ * Shared helpers for mobs that try to break into a player's shelter (Ordnance, Incendiary)
+ * and for mobs that lob potions (witches, angry villagers).
  *
  * <p>"Sealed in" means: a player is close, and the mob has no walking route to them
  * (walls, a closed door, a pillar). Vanilla mobs just stand outside in that case;
@@ -62,11 +62,11 @@ public final class Siege {
     /**
      * Lobs a thrown potion showing stack (dynamite, a molotov) so it comes down
      * at aim. A wall in the way simply makes it burst there.
-     * Returns false if the spot is out of reach.
+     * Returns false if the spot is out of reach. The thrower can be any mob (witch, villager...).
      */
     public static boolean lobPotion(
-            Witch witch, ServerLevel level, Vec3 aim, ItemStack stack) {
-        ThrownPotion thrown = new ThrownPotion(level, witch);
+            Mob thrower, ServerLevel level, Vec3 aim, ItemStack stack) {
+        ThrownPotion thrown = new ThrownPotion(level, thrower);
         thrown.setItem(stack);
 
         Vec3 from = thrown.position();
@@ -92,10 +92,10 @@ public final class Siege {
                 1.0F
         );
 
-        witch.playSound(
+        thrower.playSound(
                 SoundEvents.WITCH_THROW,
                 1.0F,
-                0.8F + witch.getRandom().nextFloat() * 0.4F
+                0.8F + thrower.getRandom().nextFloat() * 0.4F
         );
 
         level.addFreshEntity(thrown);

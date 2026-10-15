@@ -10,7 +10,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
  * Items added by the mod. None of them is obtainable: they only exist so that thrown, shot or drunk things have a
  * texture.
  * <ul>
- *   <li>Molotov Cocktail: the item a witch throws under Incendiary (see {@code IncendiaryHandler}).</li>
+ *   <li>Molotov Cocktail: the item an angry villager throws under Incendiary (see {@code AngryVillagerHandler}).</li>
  *   <li>Dynamite: the item a witch throws under Ordnance (see {@code OrdnanceHandler}).</li>
  *   <li>Explosive Arrow: the sprite the Ordnance arrow entity is drawn with.</li>
  *   <li>Milk Potion: the item a witch throws under Coven to strip your effects (see {@code CovenWitchHandler}).</li>
