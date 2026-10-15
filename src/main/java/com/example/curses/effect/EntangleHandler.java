@@ -247,4 +247,25 @@ public final class EntangleHandler {
     }
 
     /** Puts a cobweb at pos if that spot is free, and schedules its removal. Returns true if it did. */
-    private static boolean
+    private static boolean placeWeb(ServerLevel level, BlockPos pos) {
+        BlockState there = level.getBlockState(pos);
+        boolean free = there.isAir() || (there.canBeReplaced() && there.getFluidState().isEmpty());
+        if (!free) {
+            return false;
+        }
+
+        BlockState web = Blocks.COBWEB.defaultBlockState();
+        level.setBlockAndUpdate(pos, web);
+        WebData.get(level).add(pos.immutable(), level.getGameTime() + WEB_LIFETIME);
+        level.playSound(null, pos, web.getSoundType().getPlaceSound(), SoundSource.HOSTILE, 1.0F, 1.0F);
+        return true;
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        LAST_SNARE.clear();
+        LAST_WAKE.clear();
+        LAST_SNARED.clear();
+        // The web expiry list is saved with the world and is deliberately not cleared.
+    }
+}
