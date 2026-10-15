@@ -41,7 +41,8 @@ public final class CursePanel {
     private static final String CHEATS_KEY = "selectWorld.allowCommands";
     private static final int ROW_GAP = 8;          // vanilla spacing between rows of the Game tab
     private static final int ICON_GAP = 4;         // space between the button and the icon row
-    private static final int SLOT = 18;            // 16px item plus a pixel each side
+    private static final int SLOT = 18;            // 16px item with a 1px border all round
+    private static final int SLOT_GAP = 2;
     private static final int FOOTER_RESERVE = 38;  // never reach into the Create / Cancel row
     private static final int TOOLTIP_MAX_WIDTH = 220;
 
@@ -138,30 +139,34 @@ public final class CursePanel {
         Font font = Minecraft.getInstance().font;
         int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
 
-        int perRow = Math.max(1, rowW / SLOT);
-        int rowsFit = Math.max(0, (screenHeight - FOOTER_RESERVE - rowY) / SLOT);
+        int pitch = SLOT + SLOT_GAP;
+        int perRow = Math.max(1, (rowW + SLOT_GAP) / pitch);
+        int rowsFit = Math.max(0, (screenHeight - FOOTER_RESERVE - rowY + SLOT_GAP) / pitch);
         int capacity = perRow * rowsFit;
         boolean overflow = chosen.size() > capacity;
         int drawn = overflow ? Math.max(0, capacity - 1) : chosen.size();
+        int cells = overflow && capacity > 0 ? drawn + 1 : drawn; // the "+N" marker takes the last cell
 
         Curse hovered = null;
-        for (int i = 0; i < drawn; i++) {
-            int x = rowX + (i % perRow) * SLOT;
-            int y = rowY + (i / perRow) * SLOT;
+        for (int i = 0; i < cells; i++) {
+            int rowStart = (i / perRow) * perRow;
+            int inThisRow = Math.min(perRow, cells - rowStart);
+            // Every row is centred under the button on its own, so a short last row is centred too.
+            int x = rowX + (rowW - (inThisRow * pitch - SLOT_GAP)) / 2 + (i - rowStart) * pitch;
+            int y = rowY + (i / perRow) * pitch;
+            if (i >= drawn) {
+                String more = "+" + (chosen.size() - drawn);
+                graphics.drawString(font, more, x + (SLOT - font.width(more)) / 2, y + (SLOT - font.lineHeight) / 2 + 1, 0xFFFFFF, true);
+                continue;
+            }
             Curse curse = chosen.get(i);
             boolean over = mouseX >= x && mouseX < x + SLOT && mouseY >= y && mouseY < y + SLOT;
-            graphics.fill(x, y, x + SLOT - 1, y + SLOT - 1, 0xFF000000);
-            graphics.renderOutline(x, y, SLOT - 1, SLOT - 1, 0xFF555555);
+            graphics.fill(x, y, x + SLOT, y + SLOT, 0xFF000000);
+            graphics.renderOutline(x, y, SLOT, SLOT, over ? 0xFFFFFFFF : 0xFF555555);
             ItemIcon.draw(graphics, curse.icon(), x + 1, y + 1, 16);
             if (over) {
                 hovered = curse;
-                graphics.fill(x + 1, y + 1, x + SLOT - 2, y + SLOT - 2, 0x80FFFFFF);
             }
-        }
-        if (overflow && capacity > 0) {
-            int x = rowX + (drawn % perRow) * SLOT;
-            int y = rowY + (drawn / perRow) * SLOT;
-            graphics.drawString(font, "+" + (chosen.size() - drawn), x + 2, y + 5, 0xFFFFFF, true);
         }
 
         if (hovered != null) {
