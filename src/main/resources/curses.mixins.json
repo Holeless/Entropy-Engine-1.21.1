@@ -8,7 +8,9 @@
     "PiglinAiMixin"
   ],
   "client": [
-    "LivingEntityRendererMixin"
+    "LivingEntityRendererMixin",
+    "ZombieModelMixin",
+    "ZombieVillagerModelMixin"
   ],
   "injectors": {
     "defaultRequire": 1

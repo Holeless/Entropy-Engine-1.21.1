@@ -11,6 +11,7 @@ import com.example.curses.curse.Curses;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.EntityTypeTags;
@@ -28,6 +29,8 @@ import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.piglin.AbstractPiglin;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
@@ -143,6 +146,11 @@ public final class BlockBreakerHandler {
         if (!tool.isEmpty()) {
             float speed = tool.getDestroySpeed(block);
             if (speed > 1.0F) { // 1.0 means the tool is no better than a hand on this block
+                int efficiency = EnchantmentHelper.getItemEnchantmentLevel(
+                        level.registryAccess().registryOrThrow(Registries.ENCHANTMENT).getHolderOrThrow(Enchantments.EFFICIENCY), tool);
+                if (efficiency > 0) {
+                    speed += efficiency * efficiency + 1; // same bonus a player gets
+                }
                 return TOOL_BASE_TICKS + (int) Math.ceil(hardness * TICKS_PER_HARDNESS / speed);
             }
         }
@@ -320,7 +328,7 @@ public final class BlockBreakerHandler {
         if (state.progress % 4 == 0) {
             level.playSound(null, pos, block.getSoundType().getHitSound(), SoundSource.HOSTILE, 0.6F, 0.8F);
         }
-        if (state.progress % 6 == 0) {
+        if (state.progress % 6 == 1) { // a player's swing lasts 6 ticks, so this is a continuous swing
             mob.swing(InteractionHand.MAIN_HAND);
         }
         mob.getLookControl().setLookAt(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);

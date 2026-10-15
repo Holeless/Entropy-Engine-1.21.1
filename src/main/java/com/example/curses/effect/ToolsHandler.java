@@ -4,7 +4,8 @@ import com.example.curses.CursesMod;
 import com.example.curses.curse.CurseData;
 import com.example.curses.curse.Curses;
 
-import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -13,7 +14,8 @@ import net.minecraft.world.entity.monster.Drowned;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
@@ -24,15 +26,17 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
  *
  * <p><b>Who:</b> every zombie (husks and zombie villagers too, not drowned, which hold tridents). Each zombie rolls
  * once (remembered in its saved data): {@link #PICKAXE_CHANCE} for a pickaxe, {@link #AXE_CHANCE} for an axe, nothing
- * otherwise. A zombie that already holds something in its main hand is left alone. The tool is wooden, stone or iron
- * and is not loot.</p>
+ * otherwise. A zombie that already holds something in its main hand is left alone. The tool is not loot.</p>
  *
- * <p><b>Digging:</b> done by {@code BlockBreakerHandler} (the same hand-mining the Breach curse uses): a zombie that is
- * hunting you and cannot walk to you mines the blocks in its way. With a tool in hand that works with Tools alone
- * (no Breach needed), and it is much faster than bare hands on the blocks the tool is made for (stone and ore with a
- * pickaxe, wood with an axe).</p>
+ * <p><b>The tool:</b> an axe is wooden (30%), stone (40%) or iron (30%). A pickaxe is diamond {@link #DIAMOND_CHANCE} of
+ * the time, otherwise wooden, stone or iron in the same 3:4:3 split. {@link #ENCHANT_CHANCE} of all tools carry
+ * Efficiency I-V (random level).</p>
  *
- * <p>The tool's attack bonus is removed, so a zombie hits exactly as hard as in vanilla. Server only.</p>
+ * <p><b>Fighting:</b> the tool keeps its normal attack bonus, so a zombie hits for its own damage plus the tool's.</p>
+ *
+ * <p><b>Digging:</b> done by {@code BlockBreakerHandler}: a zombie that is hunting you and cannot walk to you mines the
+ * blocks in its way, at the speed its tool (and Efficiency) would give a player. Works with Tools alone, no Breach
+ * needed. Server only.</p>
  */
 @EventBusSubscriber(modid = CursesMod.MOD_ID)
 public final class ToolsHandler {
@@ -40,6 +44,11 @@ public final class ToolsHandler {
     public static final float PICKAXE_CHANCE = 0.20F;
     /** Chance for each zombie to get an axe. */
     public static final float AXE_CHANCE = 0.20F;
+    /** Chance for a pickaxe to be diamond. */
+    public static final float DIAMOND_CHANCE = 0.20F;
+    /** Chance for a tool to be enchanted with Efficiency. */
+    public static final float ENCHANT_CHANCE = 0.40F;
+    private static final int MAX_EFFICIENCY = 5;
 
     private static final String KEY_ROLLED = "curses_tools_rolled";
 
@@ -67,14 +76,20 @@ public final class ToolsHandler {
         }
 
         ItemStack tool = pickaxe ? pickaxe(random) : axe(random);
-        // Only the digging matters: without this a zombie with an iron axe would hit for 11 instead of 3.
-        tool.set(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY);
+        if (random.nextFloat() < ENCHANT_CHANCE) {
+            Holder<Enchantment> efficiency = level.registryAccess().registryOrThrow(Registries.ENCHANTMENT)
+                    .getHolderOrThrow(Enchantments.EFFICIENCY);
+            tool.enchant(efficiency, 1 + random.nextInt(MAX_EFFICIENCY));
+        }
         zombie.setItemSlot(EquipmentSlot.MAINHAND, tool);
         zombie.setDropChance(EquipmentSlot.MAINHAND, 0.0F); // the curse's tool is not loot
-        CursesMod.LOGGER.debug("Tools: gave {} to {} at {}", tool.getItem(), zombie.getType(), zombie.blockPosition());
+        CursesMod.LOGGER.debug("Tools: gave {} to {} at {}", tool, zombie.getType(), zombie.blockPosition());
     }
 
     private static ItemStack pickaxe(RandomSource random) {
+        if (random.nextFloat() < DIAMOND_CHANCE) {
+            return new ItemStack(Items.DIAMOND_PICKAXE);
+        }
         int tier = random.nextInt(10);
         return new ItemStack(tier < 3 ? Items.WOODEN_PICKAXE : tier < 7 ? Items.STONE_PICKAXE : Items.IRON_PICKAXE);
     }
