@@ -79,7 +79,7 @@
   "curse.curses.sagacious.description": "Hostile mobs have 2.25x detection range",
 
   "curse.curses.omniscience.name": "Omniscience",
-  "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance",
+  "curse.curses.omniscience.description": "Hostile mobs have infinite detection range: they always know where you are, within render distance. Endermen, creepers and witches dig one shared tunnel through rock and walls to reach you, and every other mob follows it",
 
   "curse.curses.inconspicuous.name": "Inconspicuous",
   "curse.curses.inconspicuous.description": "Creepers have a chance to spawn 80% transparent. These creepers make no sound when they ignite",
