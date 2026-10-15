@@ -1,6 +1,7 @@
 package com.example.curses.effect;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -11,11 +12,15 @@ import com.example.curses.curse.Curses;
 import com.example.curses.registry.CursesItems;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Enemy;
@@ -26,7 +31,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -41,12 +50,21 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
  *
  * <ul>
  *   <li><b>Self-levitation.</b> A witch that is hunting a player who is well above her (a tower, a pillar, a
- *       ledge) and has no walking route to them drinks a Levitation potion. She holds the mod's own
- *       {@code curses:potion_of_levitation} item (your texture) for the normal 32-tick drink; vanilla's witch code only
- *       applies the effects of a real potion, so when the drink ends this handler applies Levitation itself. While
- *       levitating she is nudged sideways toward the player. When she has risen to the player's height the
- *       levitation is cut and she gets a short Slow Falling, so she drifts down next to them instead of rising into
- *       the sky or taking fall damage.</li>
+ *       ledge) and has no walking route to them drinks a Levitation potion (the mod's own
+ *       {@code curses:potion_of_levitation} item for the normal drink time) and then <i>flies</i> to them. The flight
+ *       is planned before she drinks, see {@link #plan}:
+ *       <ul>
+ *         <li>She picks a <b>landing spot</b> on a floor near the player (the top of their tower), or, if there is
+ *             none, a <b>hover spot</b> 2.5-7 blocks from them with a clear line of sight (a pillar, a sealed roof).</li>
+ *         <li>The route there is tested against the real blocks with her own body size: straight, up-then-across,
+ *             across-then-up, or up and over the top (6, 14 or 24 blocks above). She only drinks if one of those is
+ *             clear, so she never wastes the potion under a ceiling.</li>
+ *         <li>While flying she steers herself in 3D along the route (not just straight up), re-plans if she gets
+ *             stuck or if the player moves away, and keeps her target on the player so she throws potions on the way.</li>
+ *         <li>At a landing spot she drops the last bit with Slow Falling and fights from there. At a hover spot she
+ *             hangs in the air throwing potions for up to {@link #HOVER_TICKS} ticks (looking every few seconds for a
+ *             floor to land on), then comes down gently.</li>
+ *       </ul></li>
  *   <li><b>Curse cleansing.</b> A witch with a player in sight 5-14 blocks away lobs a Milk Potion when the
  *       player has more positive effects than negative ones. The potion is the mod's own
  *       {@code curses:splash_potion_of_milk} item (your texture), tagged so that on impact it clears every effect from
@@ -66,18 +84,39 @@ public final class CovenWitchHandler {
 
     private static final int CHECK_INTERVAL = 10;          // ticks between decisions per witch
 
-    // Levitation
-    private static final int LEV_AMPLIFIER = 3;            // Levitation IV: about 0.2 blocks per tick
-    private static final double LEV_MIN_RISE = 3.0;        // the player must be at least this far above
+    // Levitation: deciding
+    private static final double LEV_MIN_RISE = 2.5;        // the player must be at least this far above
     private static final double LEV_MAX_RISE = 40.0;
-    private static final double LEV_RANGE_SQR = 22.0 * 22.0; // sideways + vertical distance limit
+    private static final double LEV_MAX_HORIZONTAL = 32.0; // sideways distance limit
+    private static final double LEV_SEARCH = 32.0;         // looks for a player this far when it has no target
     private static final float LEV_CHANCE = 0.5F;          // per check
     private static final int LEV_COOLDOWN = 400;
     private static final int LEV_RECHECK = 100;            // after finding the player walkable, look again later
-    private static final int MAX_FLIGHT = 300;             // ticks after which a flight is dropped
+    private static final int LEV_NO_ROUTE = 100;           // no clear flight right now: look again soon
     private static final int FLIGHT_START_GRACE = 80;      // drink never finished: forget it after this
-    private static final double FLIGHT_SPEED = 0.14;       // sideways blocks per tick while levitating
-    private static final double ARRIVE_DIST = 1.5;
+
+    // Levitation: planning
+    private static final int CANDIDATES = 28;              // landing / hover spots tried around the player
+    private static final double SPOT_MIN_RADIUS = 2.5;
+    private static final double SPOT_MAX_RADIUS = 7.0;
+    private static final int MAX_ROUTE_TESTS = 4;          // spots (nearest first) whose routes are really swept
+    private static final double SWEEP_STEP = 0.4;
+    private static final double[] OVER_TOP = {6.0, 14.0, 24.0};
+    private static final int BUILD_MARGIN = 6;
+
+    // Levitation: flying
+    private static final double CRUISE = 0.24;             // blocks per tick (about 5 blocks a second)
+    private static final double REACH = 1.0;               // a waypoint counts as reached this close
+    private static final double REACH_LAST = 0.6;
+    private static final int MAX_FLIGHT = 900;             // ticks, the whole flight
+    private static final int HOVER_TICKS = 500;
+    private static final int REPLAN_INTERVAL = 60;
+    private static final double DRIFT_SQR = 6.0 * 6.0;     // the player moved this far from where the route aims
+    private static final int STUCK_PERIOD = 20;
+    private static final double STUCK_MOVE_SQR = 0.5 * 0.5;
+    private static final int STUCK_LIMIT = 2;              // stuck periods in a row before a re-plan
+    private static final int MAX_REPLAN_FAILS = 2;
+    private static final double LAND_DRIFT = 0.1;          // sideways blocks per tick while gently falling
 
     // Milk
     private static final double MILK_MIN = 5.0;
@@ -98,17 +137,44 @@ public final class CovenWitchHandler {
     private static final double SPLASH_RADIUS = 4.0;       // vanilla splash radius
     private static final double PLAYER_CLEARANCE = SPLASH_RADIUS + 0.5;
 
+    private enum Stage {
+        DRINK, FLY, HOVER, LAND
+    }
+
+    /** Where she is going: waypoints (feet positions, the first leg starts where she stands), and whether the last one is a floor. */
+    private record Plan(List<Vec3> route, boolean landing) {
+    }
+
     private static final class Flight {
         final Player player;
         final long started;
-        final int duration;      // ticks of Levitation to apply when the drink finishes
-        boolean applied;         // Levitation has been applied
-        boolean airborne;
+        Stage stage = Stage.DRINK;
+        List<Vec3> route = List.of();
+        int leg;
+        boolean landing;
+        Vec3 hoverPoint;
+        Vec3 anchor;          // where the player was when the route was made
+        long hoverSince;
+        long nextReplan;
+        long sampleAt;
+        Vec3 samplePos;
+        int stuck;
+        int replanFails;
 
-        Flight(Player player, long started, int duration) {
+        Flight(Player player, long started) {
             this.player = player;
             this.started = started;
-            this.duration = duration;
+            this.anchor = player.position();
+        }
+
+        void adopt(Plan plan, Player target) {
+            this.route = plan.route();
+            this.leg = 0;
+            this.landing = plan.landing();
+            this.hoverPoint = null;
+            this.anchor = target.position();
+            this.stuck = 0;
+            this.stage = Stage.FLY;
         }
     }
 
@@ -168,7 +234,7 @@ public final class CovenWitchHandler {
 
         Flight flight = FLIGHTS.get(witch);
         if (flight != null) {
-            tickFlight(witch, flight, now);
+            tickFlight(level, witch, flight, now);
         }
         Follow follow = FOLLOWS.get(witch);
         if (follow != null && now >= follow.due) {
@@ -189,7 +255,7 @@ public final class CovenWitchHandler {
     }
 
     // ---------------------------------------------------------------------------------------------------
-    // Self-levitation
+    // Self-levitation: deciding
     // ---------------------------------------------------------------------------------------------------
 
     private static void tryLevitation(Witch witch, ServerLevel level, long now) {
@@ -200,12 +266,14 @@ public final class CovenWitchHandler {
         if (ready != null && now < ready) {
             return;
         }
-        Player player = witch.getTarget() instanceof Player target ? target : level.getNearestPlayer(witch, 24.0);
+        Player player = witch.getTarget() instanceof Player target ? target : level.getNearestPlayer(witch, LEV_SEARCH);
         if (player == null || !valid(witch, player)) {
             return;
         }
         double rise = player.getY() - witch.getY();
-        if (rise < LEV_MIN_RISE || rise > LEV_MAX_RISE || witch.distanceToSqr(player) > LEV_RANGE_SQR) {
+        double dx = player.getX() - witch.getX();
+        double dz = player.getZ() - witch.getZ();
+        if (rise < LEV_MIN_RISE || rise > LEV_MAX_RISE || Math.sqrt(dx * dx + dz * dz) > LEV_MAX_HORIZONTAL) {
             return;
         }
         if (witch.getRandom().nextFloat() >= LEV_CHANCE) {
@@ -216,10 +284,14 @@ public final class CovenWitchHandler {
             LEV_READY.put(witch, now + LEV_RECHECK);
             return;
         }
+        // She only drinks if there is a flight that is clear of blocks all the way, so she never wastes the potion
+        // under a ceiling.
+        Plan plan = plan(level, witch, player);
+        if (plan == null) {
+            LEV_READY.put(witch, now + LEV_NO_ROUTE);
+            return;
+        }
         LEV_READY.put(witch, now + LEV_COOLDOWN);
-
-        double perTick = 0.05 * (LEV_AMPLIFIER + 1);
-        int duration = Math.min(200, (int) Math.ceil(rise / perTick) + 20);
 
         // The witch holds the mod's own levitation potion item (your texture) for the normal drinking time. Vanilla
         // clears her hand when the drink ends but only applies effects for a real potion, so tickFlight applies
@@ -232,66 +304,305 @@ public final class CovenWitchHandler {
         level.playSound(null, witch.getX(), witch.getY(), witch.getZ(), SoundEvents.WITCH_DRINK, witch.getSoundSource(),
                 1.0F, 0.8F + witch.getRandom().nextFloat() * 0.4F);
 
-        FLIGHTS.put(witch, new Flight(player, now, duration));
-        CursesMod.LOGGER.debug("Coven: witch at {} drinks levitation to reach a player {} blocks above", witch.blockPosition(), (int) rise);
+        Flight flight = new Flight(player, now);
+        flight.route = plan.route();
+        flight.landing = plan.landing();
+        FLIGHTS.put(witch, flight);
+        CursesMod.LOGGER.debug("Coven: witch at {} drinks levitation to reach a player {} blocks above ({} route)",
+                witch.blockPosition(), (int) rise, plan.landing() ? "landing" : "hover");
     }
 
-    private static void tickFlight(Witch witch, Flight flight, long now) {
+    // ---------------------------------------------------------------------------------------------------
+    // Self-levitation: planning
+    // ---------------------------------------------------------------------------------------------------
+
+    /**
+     * A flight from where the witch stands to a spot near the player, or null if no clear one exists. Floors near
+     * the player are preferred (she lands and fights there); otherwise spots in the air with a line of sight.
+     */
+    private static Plan plan(ServerLevel level, Witch witch, Player player) {
+        Vec3 start = witch.position();
+        RandomSource random = witch.getRandom();
+        Vec3 feet = player.position();
+        Vec3 eye = player.getEyePosition();
+        int playerY = (int) Math.floor(feet.y);
+
+        List<Vec3> landings = new ArrayList<>();
+        List<Vec3> hovers = new ArrayList<>();
+        for (int i = 0; i < CANDIDATES; i++) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radius = SPOT_MIN_RADIUS + random.nextDouble() * (SPOT_MAX_RADIUS - SPOT_MIN_RADIUS);
+            int x = (int) Math.floor(feet.x + Math.cos(angle) * radius);
+            int z = (int) Math.floor(feet.z + Math.sin(angle) * radius);
+
+            Vec3 floor = findFloor(level, witch, x, playerY, z);
+            if (floor != null) {
+                landings.add(floor);
+            }
+            Vec3 hover = new Vec3(x + 0.5, feet.y + 0.5 + random.nextDouble() * 2.0, z + 0.5);
+            if (fits(level, witch, hover) && sees(level, witch, hover, eye)) {
+                hovers.add(hover);
+            }
+        }
+        Comparator<Vec3> nearest = Comparator.comparingDouble(v -> v.distanceToSqr(start));
+        landings.sort(nearest);
+        hovers.sort(nearest);
+
+        Plan plan = firstRoute(level, witch, start, landings, true);
+        return plan != null ? plan : firstRoute(level, witch, start, hovers, false);
+    }
+
+    private static Plan firstRoute(ServerLevel level, Witch witch, Vec3 start, List<Vec3> goals, boolean landing) {
+        for (int i = 0; i < Math.min(goals.size(), MAX_ROUTE_TESTS); i++) {
+            List<Vec3> route = route(level, witch, start, goals.get(i));
+            if (route != null) {
+                return new Plan(route, landing);
+            }
+        }
+        return null;
+    }
+
+    /** The first of a few simple routes whose every leg is free for the witch's body, or null. */
+    private static List<Vec3> route(ServerLevel level, Witch witch, Vec3 start, Vec3 goal) {
+        List<List<Vec3>> options = new ArrayList<>();
+        options.add(List.of(start, goal));                                                   // straight
+        options.add(List.of(start, new Vec3(start.x, goal.y, start.z), goal));               // up, then across
+        options.add(List.of(start, new Vec3(goal.x, start.y, goal.z), goal));                // across, then up
+        for (double over : OVER_TOP) {                                                       // up and over the top
+            double y = Math.min(Math.max(start.y, goal.y) + over, level.getMaxBuildHeight() - BUILD_MARGIN);
+            options.add(List.of(start, new Vec3(start.x, y, start.z), new Vec3(goal.x, y, goal.z), goal));
+        }
+        for (List<Vec3> option : options) {
+            boolean clear = true;
+            for (int i = 1; i < option.size() && clear; i++) {
+                clear = sweep(level, witch, option.get(i - 1), option.get(i));
+            }
+            if (clear) {
+                return new ArrayList<>(option.subList(1, option.size()));
+            }
+        }
+        return null;
+    }
+
+    /** Can the witch's body move in a straight line from a to b without touching a block? (Unloaded chunks count as blocked.) */
+    private static boolean sweep(ServerLevel level, Witch witch, Vec3 a, Vec3 b) {
+        Vec3 d = b.subtract(a);
+        int steps = Math.max(1, (int) Math.ceil(d.length() / SWEEP_STEP));
+        EntityDimensions size = witch.getDimensions(witch.getPose());
+        for (int i = 1; i <= steps; i++) {
+            Vec3 p = a.add(d.scale((double) i / steps));
+            BlockPos pos = BlockPos.containing(p);
+            if (!level.hasChunkAt(pos) || level.isOutsideBuildHeight(pos) || !level.noCollision(witch, size.makeBoundingBox(p))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Is there room for the witch's body with its feet here? */
+    private static boolean fits(ServerLevel level, Witch witch, Vec3 feet) {
+        BlockPos pos = BlockPos.containing(feet);
+        return level.hasChunkAt(pos) && !level.isOutsideBuildHeight(pos)
+                && level.noCollision(witch, witch.getDimensions(witch.getPose()).makeBoundingBox(feet));
+    }
+
+    /** Could a witch hovering here see the player's eyes? */
+    private static boolean sees(ServerLevel level, Witch witch, Vec3 feet, Vec3 playerEye) {
+        Vec3 eye = feet.add(0.0, 1.6, 0.0);
+        return level.clip(new ClipContext(eye, playerEye, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, witch))
+                .getType() == HitResult.Type.MISS;
+    }
+
+    /** A floor she can stand on in this column, from 2 blocks above the player's feet down to 3 below, or null. */
+    private static Vec3 findFloor(ServerLevel level, Witch witch, int x, int playerY, int z) {
+        for (int dy = 2; dy >= -3; dy--) {
+            BlockPos feet = new BlockPos(x, playerY + dy, z);
+            if (!level.hasChunkAt(feet)) {
+                return null;
+            }
+            BlockPos below = feet.below();
+            BlockState floor = level.getBlockState(below);
+            if (!floor.isFaceSturdy(level, below, Direction.UP) || !floor.getFluidState().isEmpty()
+                    || floor.is(Blocks.MAGMA_BLOCK) || floor.is(Blocks.CACTUS) || floor.is(BlockTags.CAMPFIRES)) {
+                continue;
+            }
+            Vec3 spot = Vec3.atBottomCenterOf(feet);
+            if (fits(level, witch, spot)) {
+                return spot;
+            }
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------------------------------------------
+    // Self-levitation: flying
+    // ---------------------------------------------------------------------------------------------------
+
+    private static void tickFlight(ServerLevel level, Witch witch, Flight flight, long now) {
         Player player = flight.player;
-        if (!valid(witch, player) || now - flight.started > MAX_FLIGHT) {
+        if (!enabled(level) || !valid(witch, player) || now - flight.started > MAX_FLIGHT) {
             endFlight(witch);
             return;
         }
-        boolean levitating = witch.hasEffect(MobEffects.LEVITATION);
 
-        // The drink has finished (vanilla emptied her hand): apply the levitation the potion stands for.
-        if (!levitating && !flight.applied && !flight.airborne && !witch.isDrinkingPotion() && now > flight.started + 1) {
-            if (witch.getMainHandItem().is(CursesItems.LEVITATION_POTION.get())) {
-                witch.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-            }
-            witch.addEffect(new MobEffectInstance(MobEffects.LEVITATION, flight.duration, LEV_AMPLIFIER));
-            flight.applied = true;
-            levitating = true;
-        }
-
-        if (levitating) {
-            flight.airborne = true;
-        } else if (flight.airborne) {
-            if (witch.onGround() || witch.isInWater()) {
-                FLIGHTS.remove(witch); // landed
+        // The drink: wait for vanilla to finish it, then apply the levitation the potion stands for.
+        if (flight.stage == Stage.DRINK) {
+            if (witch.isDrinkingPotion() || now <= flight.started + 1) {
+                if (now - flight.started > FLIGHT_START_GRACE) {
+                    clearPotion(witch);
+                    FLIGHTS.remove(witch); // the drink never finished
+                }
                 return;
             }
-        } else {
-            if (now - flight.started > FLIGHT_START_GRACE) {
-                if (witch.getMainHandItem().is(CursesItems.LEVITATION_POTION.get())) {
-                    witch.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-                }
-                FLIGHTS.remove(witch); // the drink never finished
-            }
-            return; // still drinking
+            clearPotion(witch);
+            flight.stage = Stage.FLY;
+            flight.sampleAt = now;
+            flight.samplePos = witch.position();
+            flight.nextReplan = now + REPLAN_INTERVAL;
         }
 
         witch.resetFallDistance();
         witch.getLookControl().setLookAt(player, 30.0F, 30.0F);
 
-        double dx = player.getX() - witch.getX();
-        double dz = player.getZ() - witch.getZ();
-        double dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > ARRIVE_DIST) {
-            Vec3 motion = witch.getDeltaMovement();
-            double wantX = dx / dist * FLIGHT_SPEED;
-            double wantZ = dz / dist * FLIGHT_SPEED;
-            witch.setDeltaMovement(motion.x + (wantX - motion.x) * 0.25, motion.y, motion.z + (wantZ - motion.z) * 0.25);
+        if (flight.stage == Stage.LAND) {
+            tickLanding(witch, flight);
+            return;
         }
 
-        // At the player's height: stop rising and come down gently.
-        if (levitating && witch.getY() >= player.getY() - 0.3) {
-            settle(witch);
+        // Flying or hovering: the witch is steered here, her own pathing is switched off, her potions stay on.
+        witch.getNavigation().stop();
+        keepLevitating(witch);
+        if (witch.getTarget() != player) {
+            witch.setTarget(player);
+        }
+        Vec3 pos = witch.position();
+
+        if (flight.stage == Stage.HOVER && now - flight.hoverSince > HOVER_TICKS) {
+            flight.landing = false;
+            startLanding(witch, flight);
+            return;
+        }
+
+        // Re-plan: the player moved away from where the route aims, or (hovering) look for a floor to land on.
+        if (now >= flight.nextReplan) {
+            flight.nextReplan = now + REPLAN_INTERVAL;
+            boolean drifted = player.position().distanceToSqr(flight.anchor) > DRIFT_SQR;
+            if (drifted || flight.stage == Stage.HOVER) {
+                Plan plan = plan(level, witch, player);
+                if (plan != null && (drifted || plan.landing())) {
+                    flight.adopt(plan, player);
+                }
+            }
+        }
+
+        // Stuck (a ceiling, a wall the route did not account for): find another way, or give up.
+        if (flight.stage == Stage.FLY && now - flight.sampleAt >= STUCK_PERIOD) {
+            flight.stuck = pos.distanceToSqr(flight.samplePos) < STUCK_MOVE_SQR ? flight.stuck + 1 : 0;
+            flight.sampleAt = now;
+            flight.samplePos = pos;
+            if (flight.stuck >= STUCK_LIMIT) {
+                flight.stuck = 0;
+                Plan plan = plan(level, witch, player);
+                if (plan != null) {
+                    flight.adopt(plan, player);
+                } else if (++flight.replanFails >= MAX_REPLAN_FAILS) {
+                    flight.landing = false;
+                    startLanding(witch, flight);
+                    return;
+                }
+            }
+        }
+
+        if (flight.stage == Stage.HOVER) {
+            steerHover(witch, flight.hoverPoint);
+            return;
+        }
+
+        // Fly the route.
+        Vec3 waypoint = flight.route.get(flight.leg);
+        boolean last = flight.leg == flight.route.size() - 1;
+        double reach = last ? REACH_LAST : REACH;
+        if (pos.distanceToSqr(waypoint) < reach * reach) {
+            if (!last) {
+                flight.leg++;
+                waypoint = flight.route.get(flight.leg);
+            } else if (flight.landing) {
+                startLanding(witch, flight);
+                return;
+            } else {
+                flight.stage = Stage.HOVER;
+                flight.hoverPoint = waypoint;
+                flight.hoverSince = now;
+                steerHover(witch, waypoint);
+                return;
+            }
+        }
+        steer(witch, waypoint);
+    }
+
+    /** Pulls the witch toward {@code target} at cruise speed (easing velocity, not snapping it). */
+    private static void steer(Witch witch, Vec3 target) {
+        Vec3 to = target.subtract(witch.position());
+        double dist = to.length();
+        if (dist < 1.0E-3) {
+            return;
+        }
+        Vec3 want = dist > CRUISE ? to.scale(CRUISE / dist) : to;
+        Vec3 motion = witch.getDeltaMovement();
+        witch.setDeltaMovement(motion.add(want.subtract(motion).scale(0.3)));
+    }
+
+    /** Holds the witch in the air at {@code point}. */
+    private static void steerHover(Witch witch, Vec3 point) {
+        Vec3 want = point.subtract(witch.position()).scale(0.25);
+        double length = want.length();
+        if (length > 0.2) {
+            want = want.scale(0.2 / length);
+        }
+        Vec3 motion = witch.getDeltaMovement();
+        witch.setDeltaMovement(motion.add(want.subtract(motion).scale(0.3)));
+    }
+
+    /** The levitation effect is only for show now (the witch is steered directly), but it keeps gravity off and shows the swirl. */
+    private static void keepLevitating(Witch witch) {
+        MobEffectInstance effect = witch.getEffect(MobEffects.LEVITATION);
+        if (effect == null || effect.getDuration() < 20) {
+            witch.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 60, 0));
+        }
+    }
+
+    private static void startLanding(Witch witch, Flight flight) {
+        flight.stage = Stage.LAND;
+        witch.setDeltaMovement(witch.getDeltaMovement().scale(0.3));
+        settle(witch);
+    }
+
+    /** Coming down gently (after a landing spot was reached, or when the hover is over). */
+    private static void tickLanding(Witch witch, Flight flight) {
+        if (witch.onGround() || witch.isInWater()) {
+            FLIGHTS.remove(witch);
+            return;
+        }
+        if (!flight.landing) {
+            Vec3 to = flight.player.position().subtract(witch.position());
+            double dist = Math.sqrt(to.x * to.x + to.z * to.z);
+            if (dist > 1.5) {
+                Vec3 motion = witch.getDeltaMovement();
+                witch.setDeltaMovement(motion.x + (to.x / dist * LAND_DRIFT - motion.x) * 0.25, motion.y,
+                        motion.z + (to.z / dist * LAND_DRIFT - motion.z) * 0.25);
+            }
+        }
+    }
+
+    private static void clearPotion(Witch witch) {
+        if (witch.getMainHandItem().is(CursesItems.LEVITATION_POTION.get())) {
+            witch.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
         }
     }
 
     private static void endFlight(Witch witch) {
         FLIGHTS.remove(witch);
+        clearPotion(witch);
         if (witch.hasEffect(MobEffects.LEVITATION)) {
             settle(witch);
         }
@@ -299,7 +610,7 @@ public final class CovenWitchHandler {
 
     private static void settle(Witch witch) {
         witch.removeEffect(MobEffects.LEVITATION);
-        witch.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0));
+        witch.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 200, 0));
     }
 
     // ---------------------------------------------------------------------------------------------------
