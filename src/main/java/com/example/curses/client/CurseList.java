@@ -20,10 +20,16 @@ import net.minecraft.util.FormattedCharSequence;
 /**
  * Vanilla-style scrolling list with one row per curse: symbol, name, description and a checkbox.
  * Click a row (or press Enter/Space on it) to toggle its curse.
+ *
+ * <p>Rows are tall enough for the longest description at the current screen width, so every description is
+ * shown in full (the list scrolls instead of cutting text off).</p>
  */
 public class CurseList extends ObjectSelectionList<CurseList.Row> {
-    private static final int ROW_HEIGHT = 40;
     private static final int ICON_SIZE = 32;
+    private static final int TEXT_OFFSET = 4 + ICON_SIZE + 8; // icon tile plus gap, from the row's left edge
+    private static final int RIGHT_RESERVE = 30;              // room for the checkbox
+    private static final int MAX_ROW_WIDTH = 420;
+    private static final int PAD = 4;
 
     // Vanilla checkbox sprites
     private static final ResourceLocation CHECKBOX = ResourceLocation.withDefaultNamespace("widget/checkbox");
@@ -32,15 +38,41 @@ public class CurseList extends ObjectSelectionList<CurseList.Row> {
     private static final ResourceLocation CHECKBOX_SELECTED_HIGHLIGHTED = ResourceLocation.withDefaultNamespace("widget/checkbox_selected_highlighted");
 
     public CurseList(Minecraft minecraft, int width, int height, int y) {
-        super(minecraft, width, height, y, ROW_HEIGHT);
+        super(minecraft, width, height, y, rowHeight(minecraft, width));
         for (Curse curse : Curses.all()) {
             this.addEntry(new Row(curse));
         }
     }
 
+    private static int rowWidth(int listWidth) {
+        return Math.max(160, Math.min(MAX_ROW_WIDTH, listWidth - 40));
+    }
+
+    private static int textWidth(int rowWidth) {
+        return Math.max(40, rowWidth - TEXT_OFFSET - RIGHT_RESERVE);
+    }
+
+    /** Height of the content of one row: padding, name lines, a small gap, description lines, padding. */
+    private static int contentHeight(Font font, Curse curse, int textWidth) {
+        int line = font.lineHeight + 1;
+        return PAD + font.split(curse.name(), textWidth).size() * line + 2
+                + font.split(curse.description(), textWidth).size() * line + PAD;
+    }
+
+    /** One height for all rows (the list needs a fixed one): the tallest curse decides. */
+    private static int rowHeight(Minecraft minecraft, int listWidth) {
+        Font font = minecraft.font;
+        int textWidth = textWidth(rowWidth(listWidth));
+        int content = ICON_SIZE + 4;
+        for (Curse curse : Curses.all()) {
+            content = Math.max(content, contentHeight(font, curse, textWidth));
+        }
+        return content + 4; // vanilla hands each row (item height - 4) to render()
+    }
+
     @Override
     public int getRowWidth() {
-        return Math.min(300, this.width - 40);
+        return rowWidth(this.width);
     }
 
     public class Row extends ObjectSelectionList.Entry<Row> {
@@ -65,13 +97,21 @@ public class CurseList extends ObjectSelectionList<CurseList.Row> {
             graphics.blit(curse.icon(), left + 4, top + 2, ICON_SIZE, ICON_SIZE, 0.0F, 0.0F, 16, 16, 16, 16);
             graphics.renderOutline(left + 3, top + 1, ICON_SIZE + 2, ICON_SIZE + 2, enabled ? 0xFFFF5555 : 0xFF555555);
 
-            int textX = left + 4 + ICON_SIZE + 8;
-            int textWidth = width - (textX - left) - 30;
-            graphics.drawString(font, curse.name(), textX, top + 4, enabled ? 0xFF5555 : 0xFFFFFF, false);
+            int textX = left + TEXT_OFFSET;
+            int textWidth = textWidth(width);
+            int lineStep = font.lineHeight + 1;
+            int y = top + PAD;
 
-            List<FormattedCharSequence> lines = font.split(curse.description(), textWidth);
-            for (int i = 0; i < Math.min(lines.size(), 2); i++) {
-                graphics.drawString(font, lines.get(i), textX, top + 16 + i * (font.lineHeight + 1), 0xA0A0A0, false);
+            List<FormattedCharSequence> nameLines = font.split(curse.name(), textWidth);
+            for (FormattedCharSequence line : nameLines) {
+                graphics.drawString(font, line, textX, y, enabled ? 0xFF5555 : 0xFFFFFF, true);
+                y += lineStep;
+            }
+            y += 2;
+            // The whole description: row height was sized for the longest one.
+            for (FormattedCharSequence line : font.split(curse.description(), textWidth)) {
+                graphics.drawString(font, line, textX, y, 0xC8C8C8, true);
+                y += lineStep;
             }
 
             ResourceLocation sprite;
