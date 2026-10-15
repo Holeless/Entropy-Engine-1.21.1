@@ -15,8 +15,6 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.player.Player;
@@ -28,7 +26,6 @@ import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -45,13 +42,18 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
  *
  * <p><b>Molotovs:</b> {@link #MOLOTOV_CHANCE} of the harmful potions a witch throws at a player (Harming,
  * Poison, Slowness, Weakness, including Coven's long-range throws) become a Molotov Cocktail instead. It is a
- * normal thrown potion in flight that shows the molotov texture. When it hits something it shatters into
- * fire: everything living within a few blocks of the impact is set alight, and fire is placed on the ground
- * around it (only where fire can survive, and only while mob griefing is on).</p>
+ * normal thrown potion in flight that shows the molotov texture. When it hits something it shatters and places
+ * fire on the ground around the impact (only where fire can survive, and only while mob griefing is on).</p>
  *
- * <p><b>Creepers:</b> everything living that a creeper's blast catches is set alight, and one in three of the
- * blocks the blast destroys is replaced by fire where it can burn (the same rule vanilla fire explosions use).
- * The fire is placed a tick after the blast, once the blocks are really gone.</p>
+ * <p><b>Creepers:</b> one in three of the blocks a creeper's blast destroys is replaced by fire where it can
+ * burn (the same rule vanilla fire explosions use). The fire is placed a tick after the blast, once the blocks
+ * are really gone.</p>
+ *
+ * <p><b>Nothing is ever set alight directly.</b> Earlier versions called {@code igniteForSeconds} on everything
+ * in a box around the impact or in the blast's list of affected entities. Those lists include entities behind
+ * walls and well outside the visible blast, which caused "ghost fire" (players and mobs catching fire for no
+ * visible reason). Now only real fire blocks exist, and entities catch fire from them exactly like in vanilla:
+ * by standing in or touching a flame.</p>
  *
  * <p>Server only.</p>
  */
@@ -59,11 +61,13 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 public final class IncendiaryHandler {
     /** Chance for a harmful witch potion to be a molotov. */
     private static final float MOLOTOV_CHANCE = 0.4F;
-    private static final double BURN_RADIUS = 2.5;
-    private static final int BURN_SECONDS = 6;
     private static final int FIRE_RADIUS = 2;
     private static final float FIRE_CHANCE = 0.6F;
-    private static final int CREEPER_BURN_SECONDS = 5;
+    /**
+     * Volume of the glass-shatter sound. The server only sends a sound to players within 16 blocks x volume, and
+     * witches throw from 24+ blocks (Coven), so at volume 1.0 many shatters were simply never sent to the player.
+     */
+    private static final float SHATTER_VOLUME = 2.5F;
 
     private record PendingFire(ServerLevel level, List<BlockPos> positions, long due) {
     }
@@ -131,23 +135,21 @@ public final class IncendiaryHandler {
         BlockPos center = hit instanceof BlockHitResult block
                 ? block.getBlockPos().relative(block.getDirection())
                 : BlockPos.containing(at);
-        shatter(level, potion, at, center);
+        shatter(level, at, center);
         potion.discard();
     }
 
-    private static void shatter(ServerLevel level, ThrownPotion potion, Vec3 at, BlockPos center) {
-        level.playSound(null, at.x, at.y, at.z, SoundEvents.SPLASH_POTION_BREAK, SoundSource.NEUTRAL, 1.0F, 1.0F);
+    private static void shatter(ServerLevel level, Vec3 at, BlockPos center) {
+        float pitch = 0.9F + level.getRandom().nextFloat() * 0.2F;
+        level.playSound(null, at.x, at.y, at.z, SoundEvents.SPLASH_POTION_BREAK, SoundSource.NEUTRAL, SHATTER_VOLUME, pitch);
         level.playSound(null, at.x, at.y, at.z, SoundEvents.FIRECHARGE_USE, SoundSource.NEUTRAL, 1.0F, 1.0F);
         level.sendParticles(ParticleTypes.FLAME, at.x, at.y + 0.2, at.z, 30, 0.7, 0.4, 0.7, 0.03);
 
-        AABB area = new AABB(at, at).inflate(BURN_RADIUS, 1.0, BURN_RADIUS);
-        for (LivingEntity living : level.getEntitiesOfClass(LivingEntity.class, area, e -> !(e instanceof Witch))) {
-            living.igniteForSeconds(BURN_SECONDS);
-        }
-
+        // No entity is set alight here: only fire blocks are placed, and they burn whoever really touches them.
         if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
             return;
         }
+        placeFire(level, center); // the impact point itself always gets a flame
         for (int dx = -FIRE_RADIUS; dx <= FIRE_RADIUS; dx++) {
             for (int dz = -FIRE_RADIUS; dz <= FIRE_RADIUS; dz++) {
                 if (dx * dx + dz * dz > FIRE_RADIUS * FIRE_RADIUS + 1) {
@@ -186,13 +188,8 @@ public final class IncendiaryHandler {
             return;
         }
 
-        for (Entity entity : event.getAffectedEntities()) {
-            if (entity instanceof LivingEntity living) {
-                living.igniteForSeconds(CREEPER_BURN_SECONDS);
-            }
-        }
-
         // The blocks are only destroyed after this event, so remember where they were and light them next tick.
+        // Entities are deliberately not ignited here (see class comment): they burn from the fire blocks only.
         List<BlockPos> spots = new ArrayList<>();
         for (BlockPos pos : event.getAffectedBlocks()) {
             if (level.getRandom().nextInt(3) == 0) {
